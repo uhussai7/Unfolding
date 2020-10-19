@@ -1,10 +1,14 @@
-import scipy
-import dipy
+import diffusion
+import coordinates
 
 class unfoldSubject:
     def __init__(self):
-        self.U_nii = []
-        self.V_nii = []
-        self.W_nii = []
+        self.coords= coordinates.coordinates()
         self.T1= []
-        self.diffusion = []
+        self.diffusion = diffusion.diffVolume()
+
+    def loadDiffusion(self,path=None):
+        self.diffusion.getVolume(folder=path)
+        self.diffusion.shells()
+
+
