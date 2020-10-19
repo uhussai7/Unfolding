@@ -1,6 +1,7 @@
 import ioFunctions
 import numpy as np
 from scipy.interpolate import griddata
+import nibabel as nib
 
 def toWorld(nii,inds):
     world = []
@@ -53,6 +54,7 @@ class coordinates:
 
     def initialize(self):
 
+        print("Inverting coordinates\n")
         U = self.U_xyz_nii.get_data()
         V = self.V_xyz_nii.get_data()
         W = self.W_xyz_nii.get_data()
@@ -75,19 +77,69 @@ class coordinates:
         v = np.linspace(min(V), max(V), N)
         w = np.linspace(min(W), max(W), N)
 
-        uu, vv, ww = np.meshgrid(u,v,w)
+        uu, vv, ww = np.meshgrid(u,v,w, indexing='ij')
 
         #create X_uvw, Y_uvw, Z_uvw for mean arclength
         points=np.asarray([U,V,W]).transpose()
 
+        print("Computing mean arc lengths\n")
         self.X_uvw_a = griddata(points,X, (uu,vv,ww))
         self.Y_uvw_a = griddata(points,Y, (uu,vv,ww))
         self.Z_uvw_a = griddata(points, Z, (uu, vv, ww))
 
+        #call method for mean arclength
+        self.meanArcLength()
+
+        print("Creating domain with mean arc lengths\n")
+        #recompute unfolded space with mean arclength
+        U=  U - np.nanmin(U)
+        V = V - np.nanmin(V)
+        W = W - np.nanmin(W)
+
+
+        U=  self.mean_u* U / np.nanmax(U)
+        V = self.mean_v * V / np.nanmax(V)
+        W = self.mean_w * W / np.nanmax(W)
+
+        res=self.U_xyz_nii.header['pixdim'][1]
+        Nu = np.round(self.mean_u / res + 1)
+        Nv = np.round(self.mean_v / res + 1)
+        Nw = np.round(self.mean_w / res + 1)
+
+
+        #choose each N to match incoming resolution
+        u = np.linspace(np.nanmin(U), np.nanmax(U), Nu)
+        v = np.linspace(np.nanmin(V), np.nanmax(V), Nv)
+        w = np.linspace(np.nanmin(W), np.nanmax(W), Nw)
+
+        uu, vv, ww = np.meshgrid(u, v, w, indexing='ij')
+
+        # create X_uvw, Y_uvw, Z_uvw for mean arclength
+        points = np.asarray([U, V, W]).transpose()
+
+        self.X_uvw_nii = griddata(points, X, (uu, vv, ww))
+        self.Y_uvw_nii = griddata(points, Y, (uu, vv, ww))
+        self.Z_uvw_nii = griddata(points, Z, (uu, vv, ww))
+
+        #turn in to nifti image
+        affine=[[res,   0,   0, u[0]],
+                [  0, res,   0, v[0]],
+                [  0,   0, res, w[0]],
+                [0,0,0,1]
+                ]
+        self.X_uvw_nii = nib.Nifti1Image(self.X_uvw_nii,affine)
+        self.Y_uvw_nii = nib.Nifti1Image(self.Y_uvw_nii, affine)
+        self.Z_uvw_nii = nib.Nifti1Image(self.Z_uvw_nii, affine)
+
+
+
+
     def meanArcLength(self):
 
         self.grads=np.zeros((3,3)+self.X_uvw_a.shape)
-        cumsum=np.zeros((3,)+self.X_uvw_a.shape)
+        self.cumsum=np.zeros((3,)+self.X_uvw_a.shape)
+        self.grads[:]=np.NaN
+        self.cumsum[:] = np.NaN
 
         Xi_uvw_a=[self.X_uvw_a, self.Y_uvw_a, self.Z_uvw_a]
 
@@ -97,42 +149,26 @@ class coordinates:
 
         #calculate the distances
         for i in range(0,3):
-            cumsum[i]=np.sqrt(self.grads[0][i]*self.grads[0][i]+ \
+            self.cumsum[i]=np.sqrt(self.grads[0][i]*self.grads[0][i]+ \
                       self.grads[1][i] * self.grads[1][i] + \
                       self.grads[2][i] * self.grads[2][i])
 
         #calculate cumalative sum
-        # for i in range(0,3):
-        #     cumsum[i] = np.nancumsum(cumsum[i],axis=i)
-        #     cumsum[i] = np.nancumsum(cumsum[i], axis=i)
-        #     cumsum[i] = np.nancumsum(cumsum[i], axis=i)
-
-
-        self.cumsum=cumsum
+        for i in range(0,3):
+            self.cumsum[i] = np.nancumsum(self.cumsum[i], axis=i)
 
         #now calculate the mean arclenth
+        self.mean_u = abs(self.cumsum[0][0, :, :] - self.cumsum[0][-1, :, :])
+        self.mean_v = abs(self.cumsum[1][:, 0, :] - self.cumsum[1][:, -1, :])
+        self.mean_w = abs(self.cumsum[2][:, :, 0] - self.cumsum[2][:,  :,-1])
 
-        self.mean_u = abs(cumsum[0][0, :, :] - cumsum[0][-1, :, :])
-        self.mean_v = abs(cumsum[1][:, 0, :] - cumsum[1][:, -1, :])
-        self.mean_w = abs(cumsum[2][:, :, 0] - cumsum[2][:, :, -1])
-
-
-
-        # self.mean_u = np.nanmean(mean_u.flatten())
-        # self.mean_v = np.nanmean(mean_v.flatten())
-        # self.mean_w = np.nanmean(mean_w.flatten())
-
-        #return mean_u, mean_v, mean_w
-
-
-        #
-        #         #compute the distance:
-        # for i in range(self.X_uvw_a.shape(0)):
-        #     for j in range(self.X_uvw_a.shape(1)):
-        #         for k in range(self.X_uvw_a.shape(2)):
-        #             u = grad[0][0]
-        #
+        self.mean_u[self.mean_u == 0]=np.NaN
+        self.mean_v[self.mean_v == 0] = np.NaN
+        self.mean_w[self.mean_w == 0] = np.NaN
 
 
 
+        self.mean_u = np.nanmean(self.mean_u.flatten())
+        self.mean_v = np.nanmean(self.mean_v.flatten())
+        self.mean_w = np.nanmean(self.mean_w.flatten())
 
