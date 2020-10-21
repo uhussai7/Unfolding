@@ -3,6 +3,34 @@ import numpy as np
 from scipy.interpolate import griddata
 import nibabel as nib
 
+class domainParams:
+    def __init__(self,min_a,max_a,min_b,max_b,min_c,max_c,Na,Nb,Nc):
+        self.min_a = min_a
+        self.max_a = max_a
+        self.min_b = min_b
+        self.max_b = max_b
+        self.min_c = min_c
+        self.max_c = max_c
+        self.Na = Na
+        self.Nb = Nb
+        self.Nc = Nc
+        self.da=  (max_a - min_a) / (Na - 1)
+        self.db = (max_a - min_a) / (Na - 1)
+        self.dc = (max_a - min_a) / (Na - 1)
+        self.affine = np.asarray([[ self.da,       0,       0,    self.min_a],
+                      [        0, self.db,       0,    self.min_b],
+                      [        0,       0, self.dc,    self.min_c],
+                      [        0,       0,       0,             1]])
+        self.A, self.B,self.C = self.makeMeshGrid()
+
+        
+    def makeMeshGrid(self):
+        A = np.linspace(self.max_a, self.min_a, self.Na)
+        B = np.linspace(self.max_b, self.min_b, self.Nb)
+        C = np.linspace(self.max_c, self.min_c, self.Nc)
+        return np.meshgrid(A, B, C, indexing='ij')
+
+
 def toWorld(nii,inds):
     world = []
     for ind in inds:
@@ -32,6 +60,7 @@ class coordinates:
         self.X_uvw_a = []  # these are to calculate arc length
         self.Y_uvw_a = []  # these are to calculate arc length
         self.Z_uvw_a = []  # these are to calculate arc length
+        # the following five may not need to be stored
         self.mean_u = []
         self.mean_v = []
         self.mean_w = []
@@ -54,7 +83,7 @@ class coordinates:
 
     def initialize(self):
 
-        print("Inverting coordinates\n")
+        print("Inverting coordinates...")
         U = self.U_xyz_nii.get_data()
         V = self.V_xyz_nii.get_data()
         W = self.W_xyz_nii.get_data()
@@ -82,7 +111,7 @@ class coordinates:
         #create X_uvw, Y_uvw, Z_uvw for mean arclength
         points=np.asarray([U,V,W]).transpose()
 
-        print("Computing mean arc lengths\n")
+        print("Computing mean arc lengths...")
         self.X_uvw_a = griddata(points,X, (uu,vv,ww))
         self.Y_uvw_a = griddata(points,Y, (uu,vv,ww))
         self.Z_uvw_a = griddata(points, Z, (uu, vv, ww))
@@ -90,7 +119,7 @@ class coordinates:
         #call method for mean arclength
         self.meanArcLength()
 
-        print("Creating domain with mean arc lengths\n")
+        print("Creating domain with mean arc lengths...")
         #recompute unfolded space with mean arclength
         U=  U - np.nanmin(U)
         V = V - np.nanmin(V)
@@ -162,7 +191,7 @@ class coordinates:
         self.mean_v = abs(self.cumsum[1][:, 0, :] - self.cumsum[1][:, -1, :])
         self.mean_w = abs(self.cumsum[2][:, :, 0] - self.cumsum[2][:,  :,-1])
 
-        self.mean_u[self.mean_u == 0]=np.NaN
+        self.mean_u[self.mean_u == 0] = np.NaN
         self.mean_v[self.mean_v == 0] = np.NaN
         self.mean_w[self.mean_w == 0] = np.NaN
 
