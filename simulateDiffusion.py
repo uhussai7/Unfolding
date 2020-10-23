@@ -70,10 +70,12 @@ class simulateDiffusion:
         self.gtab = gradient_table(bvals,bvecs)
         self.bvals = []
         self.bvecs = [] #this can be taken from hcp file and then use diffusion class to split shells
+        self.bvalsSingle= []
+        self.bvecsSingle = []
         self.Nparams=[]
         self.Uparams=[]
-        diff_nii=[]
-        mask_nii=[]
+        self.diff_nii=[]
+        self.mask_nii=[]
         phiInverse=[]
         self.U_nii=[]
         self.V_nii = []
@@ -114,37 +116,65 @@ class simulateDiffusion:
                                                                                   self.Uparams)
 
         # make the diffusion tensor
-        L1 = 0.1E-4;
-        L2 = 99.9E-4;
-        L3 = 0.00;
+        print('Calculating diffusion tensor...')
+        L1 = 99.9E-4
+        L2 = 0.1E-4
+        L3 = 0.00
         self.dTensor = diffusionTensor(L1,L2,L3,self.v1,self.v2,self.v3)
 
+        #generate the signal
+        print('generate diffusion signal')
+        self.diff_nii = self.diffusionSignal()
+
+        #make a mask
+        self.mask_nii = np.copy(self.U_nii)
+        self.mask_nii[np.isnan(self.mask_nii)==0]=1
 
 
-
-
-
+        print('Coverting to nifti...')
         #make save the nifti coordinate files
         self.U_nii = nib.Nifti1Image(self.U_nii, self.Nparams.affine)
         self.V_nii = nib.Nifti1Image(self.V_nii, self.Nparams.affine)
         self.W_nii = nib.Nifti1Image(self.W_nii, self.Nparams.affine)
+        self.diff_nii=nib.Nifti1Image(self.diff_nii,self.Nparams.affine)
+        self.mask_nii=nib.Nifti1Image(self.mask_nii,self.Nparams.affine)
 
-        if path==None:
-            nib.save(self.U_nii, './U.nii.gz')
-            nib.save(self.V_nii, './V.nii.gz')
-            nib.save(self.W_nii, './W.nii.gz')
-        else:
-            nib.save(self.U_nii, path+ 'U.nii.gz')
-            nib.save(self.V_nii, path+ 'V.nii.gz')
-            nib.save(self.W_nii, path+ 'W.nii.gz')
+        print('saving files...')
+        self.saveAll(path)
 
 
+    def saveAll(self,path):
+        if path == None: path='./'
+        nib.save(self.U_nii, path+ 'U.nii.gz')
+        nib.save(self.V_nii, path+ 'V.nii.gz')
+        nib.save(self.W_nii, path+ 'W.nii.gz')
+        nib.save(self.diff_nii,path+'data.nii.gz')
+        nib.save(self.mask_nii,path+'nodif_brain_mask.nii.gz')
+
+        #save the bvalsSings and bvecsSingle files
+        fbvals = open(path+'bvals','w')
+        fbvecs = open(path + 'bvecs', 'w')
+
+        for bval in self.bvalsSingle:
+            fbvals.write("%f "  % (bval))
+        fbvals.close()
+
+        for i in range(0,3):
+            for bvec in self.bvecsSingle:
+                fbvecs.write("%f "% (bvec[i]))
+            fbvecs.write("\n")
+        fbvecs.close()
 
     def diffusionSignal(self):
         #def fxn(X,Y,Z,b,diffD,bvecs):
 
-        #make bvecs with local
-
+        #lets just make a single shell image, this can be changed later
+        self.bvalsSingle= np.zeros(np.asarray(self.bvals[1].shape)+1)
+        self.bvalsSingle[0]=0
+        self.bvalsSingle[1:]=1000
+        self.bvecsSingle= np.zeros(np.asarray(self.bvecs[1].shape)+(1,0))
+        self.bvecsSingle[0]=[0,0,0]
+        self.bvecsSingle[1:]=self.bvecs[1]
 
         #make meshgrid for diffusion
         b = np.arange(0,len(self.bvals[1])+1)
@@ -153,8 +183,15 @@ class simulateDiffusion:
         z = np.linspace(self.Nparams.max_c, self.Nparams.max_c, self.Nparams.Nc)
         X,Y,Z,B = np.meshgrid(x,y,z,b,indexing='ij')
 
+        #compute the signal
+        gDg = np.einsum('ijabc,abcdj->abcdi',self.dTensor,self.bvecsSingle[B])
+        gDg= np.einsum('...k,...k->...',self.bvecsSingle[B],gDg)
+        S_0 = 1000
+        S=S_0*np.exp(-gDg*self.bvalsSingle[B])
 
-        #self.diff_nii=
+        return S
+
+
 
 
     def shells(self):
