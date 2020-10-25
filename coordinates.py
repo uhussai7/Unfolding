@@ -4,23 +4,36 @@ from scipy.interpolate import griddata
 import nibabel as nib
 
 class domainParams:
-    def __init__(self,min_a,max_a,min_b,max_b,min_c,max_c,Na,Nb,Nc):
+    def __init__(self,min_a,max_a,min_b,max_b,min_c,max_c,dims=None,deltas=None):
         self.min_a = min_a
         self.max_a = max_a
         self.min_b = min_b
         self.max_b = max_b
         self.min_c = min_c
         self.max_c = max_c
-        self.Na = Na
-        self.Nb = Nb
-        self.Nc = Nc
-        self.da=  (max_a - min_a) / (Na - 1)
-        self.db = (max_a - min_a) / (Na - 1)
-        self.dc = (max_a - min_a) / (Na - 1)
+        if dims==None and deltas==None:
+            raise ValueError('Please provide either number of voxels dims=[Na,Nb,Nc] or provide'
+                             'size of voxels deltas=[da,db,dc] if both provided, dims is taken'
+                             ' and deltas are discarded')
+        if dims !=None:
+            self.Na = dims[0]
+            self.Nb = dims[1]
+            self.Nc = dims[2]
+            self.da = (max_a - min_a) / (self.Na - 1)
+            self.db = (max_b - min_b) / (self.Nb - 1)
+            self.dc = (max_c - min_c) / (self.Nc - 1)
+        else:
+            self.da = deltas[0]
+            self.db = deltas[1]
+            self.dc = deltas[2]
+            self.Na = round((max_a - min_a) / self.da + 1)
+            self.Nb = round( (max_b - min_b) / self.db + 1)
+            self.Nc = round((max_c - min_c) / self.dc + 1)
+
         self.affine = np.asarray([[ self.da,       0,       0,    self.min_a],
-                      [        0, self.db,       0,    self.min_b],
-                      [        0,       0, self.dc,    self.min_c],
-                      [        0,       0,       0,             1]])
+                                 [        0, self.db,       0,    self.min_b],
+                                 [        0,       0, self.dc,    self.min_c],
+                                 [        0,       0,       0,             1]])
         self.A, self.B,self.C = self.makeMeshGrid()
 
         
@@ -29,6 +42,27 @@ class domainParams:
         B = np.linspace(self.max_b, self.min_b, self.Nb)
         C = np.linspace(self.max_c, self.min_c, self.Nc)
         return np.meshgrid(A, B, C, indexing='ij')
+
+
+def applyMask(U, V, W, dParams):
+    """
+    Makes a mask based on min max of curvilinear coordinates
+    :param U,V,W: Coordinates
+    :param dParams: domain parameter class dParams
+    :return:
+    """
+    condition = np.invert(((U >= dParams.min_a) &
+                           (U <= dParams.max_a) &
+                           (V >= dParams.min_b) &
+                           (V <= dParams.max_b) &
+                           (W >= dParams.min_c) &
+                           (W <= dParams.max_c)))
+
+    U[condition] = np.NaN
+    V[condition] = np.NaN
+    W[condition] = np.NaN
+
+    return U, V, W
 
 
 def toWorld(nii,inds):

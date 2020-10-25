@@ -1,55 +1,11 @@
 import numpy as np
-from coordinates import domainParams
+from coordinates import domainParams, applyMask
 import nibabel as nib
 from dipy.core.gradients import gradient_table
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 unused import
 import matplotlib.pyplot as plt
 
-def maskCondition(Cout,dParams):
-    return np.invert(((np.real(Cout) >= dParams.min_a) &
-               (np.real(Cout) <= dParams.max_a) &
-               (np.imag(Cout) >= dParams.min_b) &
-               (np.imag(Cout) <= dParams.max_b)))
 
-def conformal(X,Y,Z,dParams):
-
-    def fxn(C):
-        w=1
-        return np.log((1 / 2) * (C + np.sqrt(C*C - 4 * w)))
-
-    def dfxn(C):
-        w=1
-        return 1/np.sqrt(-4 * w + C*C)
-
-    #the unfolding coordiantes
-    Cout = fxn(X + Y*1j)
-
-    #the tangent vectors
-    dCout = dfxn(X + Y*1j)
-
-    #apply domain mask
-    condition = maskCondition(Cout,dParams)
-    Cout[ condition]= np.NaN + np.NaN*1j
-    Z[ condition] = np.NaN
-    dCout[condition] = np.NaN + np.NaN*1j
-
-    #for v3
-    zeros = np.zeros(X.shape)
-    ones = np.ones(X.shape)
-    zeros[condition]= np.NaN
-    ones[condition]= np.NaN
-
-    #tangent vectors for output
-    norm = np.sqrt(np.real(dCout)*np.real(dCout) +np.imag(dCout)*np.imag(dCout))
-    v1 = [np.imag(dCout)/norm, np.real(dCout)/norm,zeros]
-    v2 = [v1[1], -v1[0], zeros]
-    v3 = [zeros, zeros, ones]
-
-    return np.real(Cout), np.imag(Cout), Z, v1, v2, v3
-
-def conformalInverse(z):
-    z = np.exp(z)
-    return  z + 1/z
 
 def diffusionTensor(L1,L2,L3,v1,v2,v3):
     P = np.moveaxis( [v1, v2, v3], 0, -1)
@@ -63,7 +19,7 @@ def diffusionTensor(L1,L2,L3,v1,v2,v3):
     return np.moveaxis(diffD, -1, 0)
 
 class simulateDiffusion:
-    def __init__(self, L1,L2,L3,bvals, bvecs):
+    def __init__(self, phi,dphi,phiInv, Uparams, L1,L2,L3,bvals, bvecs):
         self.L1= L1
         self.L2 = L2
         self.L3 = L3
@@ -73,10 +29,9 @@ class simulateDiffusion:
         self.bvalsSingle= []
         self.bvecsSingle = []
         self.Nparams=[]
-        self.Uparams=[]
+        self.Uparams=Uparams
         self.diff_nii=[]
         self.mask_nii=[]
-        phiInverse=[]
         self.U_nii=[]
         self.V_nii = []
         self.W_nii = []
@@ -85,46 +40,40 @@ class simulateDiffusion:
         self.v2 = []
         self.v3 = []
         self.dTensor=[]
+        self.phi=phi
+        self.dphi=dphi
+        self.phiInv=phiInv
 
     def simulate(self,path=None):
 
-        #these are the unfolded space domain parameters
-        self.Uparams=domainParams(0.3,1.2,-np.pi/2,np.pi/2,0,0,50,50,0)
-        a = np.linspace(self.Uparams.max_a,self.Uparams.min_a,self.Uparams.Na)
-        b = np.linspace(self.Uparams.max_b,self.Uparams.min_b,self.Uparams.Nb)
-        A, B = np.meshgrid(a,b,indexing='ij')
-        C=A+B*1j
-        C=conformalInverse(C) #this brings us back to native
+        #these are XYZ in terms of UVW
+        X,Y,Z = self.phiInv(self.Uparams.A,self.Uparams.B,self.Uparams.C )
 
         #these are native space parameters
-        Na = 32
-        da = (np.nanmax(np.real(C[:])-np.nanmin(np.real(C[:]))))/(Na-1)
-        Nb = (np.nanmax(np.imag(C[:]))-np.nanmin(np.imag(C[:])))/da +1
-        Nc = 4
-        self.Nparams = domainParams(np.nanmin(np.real(C[:])), np.nanmax(np.real(C[:])),
-                               np.nanmin(np.imag(C[:])), np.nanmax(np.imag(C[:])),
-                               0,(Nc-1)*da,
-                               Na,
-                               Nb,
-                               Nc)
+        Nx = 32
+        dx = (np.nanmax(X) - np.nanmin(X)) / (Nx - 1)
+
+        self.Nparams = domainParams(np.nanmin(X), np.nanmax(X),
+                                    np.nanmin(Y), np.nanmax(Y),
+                                    np.nanmin(Z), np.nanmax(Z),
+                                    deltas=[dx, dx, self.Uparams.dc])
 
         #make the native space coordinates
         print('Making native space coordinates...')
-        self.U_nii, self.V_nii, self.W_nii, self.v1, self.v2, self.v3 = conformal(self.Nparams.A,
-                                                                                  self.Nparams.B,
-                                                                                  self.Nparams.C,
-                                                                                  self.Uparams)
+        self.U_nii, self.V_nii, self.W_nii= self.phi(self.Nparams.A,self.Nparams.B,self.Nparams.C)
+        self.U_nii, self.V_nii, self.W_nii = applyMask(self.U_nii, self.V_nii, self.W_nii,self.Uparams)
+        self.v1, self.v2, self.v3 = self.dphi(self.Nparams.A,self.Nparams.B,self.Nparams.C)
+
 
         # make the diffusion tensor
         print('Calculating diffusion tensor...')
-        L1 = 99.9E-4
-        L2 = 0.1E-4
-        L3 = 0.00
-        self.dTensor = diffusionTensor(L1,L2,L3,self.v1,self.v2,self.v3)
+        self.dTensor = diffusionTensor(self.L1,self.L2,self.L3,self.v1,self.v2,self.v3)
 
         #generate the signal
-        print('generate diffusion signal')
+        print('Generating diffusion signal')
         self.diff_nii = self.diffusionSignal()
+        self.diff_nii[np.isnan( self.U_nii)==1,:]=np.NaN
+
 
         #make a mask
         self.mask_nii = np.copy(self.U_nii)
@@ -139,7 +88,7 @@ class simulateDiffusion:
         self.diff_nii=nib.Nifti1Image(self.diff_nii,self.Nparams.affine)
         self.mask_nii=nib.Nifti1Image(self.mask_nii,self.Nparams.affine)
 
-        print('saving files...')
+        print('Saving files...')
         self.saveAll(path)
 
 
