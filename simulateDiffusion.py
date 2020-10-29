@@ -50,7 +50,7 @@ class simulateDiffusion:
         X,Y,Z = self.phiInv(self.Uparams.A,self.Uparams.B,self.Uparams.C )
 
         #these are native space parameters
-        Nx = 32
+        Nx = 16
         dx = (np.nanmax(X) - np.nanmin(X)) / (Nx - 1)
 
         self.Nparams = domainParams(np.nanmin(X), np.nanmax(X),

@@ -4,12 +4,26 @@ import numpy as np
 import nibabel as nib
 import simulateDiffusion
 import diffusion
+import unfoldSubject
 
-# coords=coordinates.coordinates()
+sub=unfoldSubject.unfoldSubject()
+sub.loadCoordinates(path="K:\\Datasets\\diffusionSimulations\\",prefix="")
+sub.coords.computeGradDev()
+sub.loadDiffusion("K:\\Datasets\\diffusionSimulations\\")
+
+sub.diffUnfold=sub.pushToUnfold(sub.diff.vol,type='diffusion')
+
+sub.diffNoGradDev()
+
+nib.save(sub.diffUnfold.vol,'diffunfold.nii.gz')
+nib.save(sub.coords.gradDevUVW_nii,'grad_dev.nii.gz')
+nib.save(sub.coords.gradDevXYZ_nii,'grad_devXYZ.nii.gz')
+
+diff_nograd_nii=nib.Nifti1Image(sub.diff_nograd,sub.diffUnfold.vol.affine)
+nib.save(diff_nograd_nii,'diff_nograd.nii.gz')
+#coords=coordinates.coordinates(path="K:\\Datasets\\diffusionSimulations\\",prefix="")
+#coords.computeGradDev()
 #
-# coords.loadCoordinates(path="K:\\Datasets\\sampleNiftiCoordinates\\",prefix="")
-#
-# coords.initialize()
 # coords.meanArcLength()
 #
 # nib.save(coords.X_uvw_nii,"X_uvw.nii.gz")

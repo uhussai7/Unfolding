@@ -33,7 +33,8 @@ def phiInv(X,Y,Z):
 #we have to specify the unfolded space params (this the domain of our
 # coordinates)
 
-Uparams = domainParams(0.3, 1.2, -np.pi / 2, np.pi / 2, 0, 3*(1.2-0.3)/(50-1), dims=[50, 50, 4])
+Uparams = domainParams(0.3, 1.2, -np.pi / 2, np.pi / 2, 0, 1,#3*(1.2-0.3)/(50-1),
+                       dims=[50, 50, 4])
 
 bvals = "K:\\Datasets\\HCP_diffusion\\101006\\Diffusion\\Diffusion\\bvals"
 bvecs = "K:\\Datasets\\HCP_diffusion\\101006\\Diffusion\\Diffusion\\bvecs"

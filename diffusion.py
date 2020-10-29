@@ -22,6 +22,7 @@ class diffVolume():
         self.sgrad_z = []
         self.current_signal=[]
         self.mask=[]
+        self.grad_dev_nii=[]
 
     def getVolume(self, folder=None):
         """
