@@ -5,22 +5,31 @@ import nibabel as nib
 import simulateDiffusion
 import diffusion
 import unfoldSubject
+from pyshtools.shtools import SHExpandLSQ
+from pyshtools.shtools import MakeGridPoint
+from pyshtools.shtools import MakeGridPointC
 
 sub=unfoldSubject.unfoldSubject()
-sub.loadCoordinates(path="K:\\Datasets\\diffusionSimulations\\",prefix="")
+#sub.loadCoordinates(path="K:\\Datasets\\diffusionSimulations\\",prefix="")
+sub.loadCoordinates(path="/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations/",prefix="")
 sub.coords.computeGradDev()
-sub.loadDiffusion("K:\\Datasets\\diffusionSimulations\\")
+sub.loadDiffusion("/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations/")
 
 sub.diffUnfold=sub.pushToUnfold(sub.diff.vol,type='diffusion')
 
 sub.diffNoGradDev()
 
-nib.save(sub.diffUnfold.vol,'diffunfold.nii.gz')
-nib.save(sub.coords.gradDevUVW_nii,'grad_dev.nii.gz')
-nib.save(sub.coords.gradDevXYZ_nii,'grad_devXYZ.nii.gz')
+upath="/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations/Unfolded/"
+nib.save(sub.diffUnfold.vol,upath+'diffunfold.nii.gz')
+nib.save(sub.coords.gradDevUVW_nii,upath+'grad_devUVW.nii.gz')
+nib.save(sub.coords.gradDevXYZ_nii,upath+'grad_devXYZ.nii.gz')
+nib.save(sub.diffUnfold.mask,upath+'nodif_brain_mask.nii.gz')
+nib.save(sub.coords.X_uvw_nii,upath+'X.nii.gz')
+nib.save(sub.coords.Y_uvw_nii,upath+'Y.nii.gz')
+nib.save(sub.coords.Z_uvw_nii,upath+'Z.nii.gz')
 
 diff_nograd_nii=nib.Nifti1Image(sub.diff_nograd,sub.diffUnfold.vol.affine)
-nib.save(diff_nograd_nii,'diff_nograd.nii.gz')
+nib.save(diff_nograd_nii,upath+'diff_nograd.nii.gz')
 #coords=coordinates.coordinates(path="K:\\Datasets\\diffusionSimulations\\",prefix="")
 #coords.computeGradDev()
 #
@@ -42,4 +51,27 @@ nib.save(diff_nograd_nii,'diff_nograd.nii.gz')
 # y = np.linspace(sim.Nparams.max_b, sim.Nparams.max_b, sim.Nparams.Nb)
 # z = np.linspace(sim.Nparams.max_c, sim.Nparams.max_c, sim.Nparams.Nc)
 # X,Y,Z,B = np.meshgrid(x,y,z,b,indexing='ij')
+
+
+
+##-------spherical harmonic testing-------##
+#extract signal at point
+# def cart2latlon(x,y,z):
+#     R=x*x+y*y+z*z
+#     lat = np.arcsin(z / R)
+#     lon = np.arctan2(y, x)
+#     return lat, lon
+#
+# S=sub.diff.vol.get_fdata()[10,10,2,sub.diff.inds[1]]
+# bvecs=np.asarray(sub.diff.bvecs_hemi_cart[1])
+# x=bvecs[:,0]
+# y=bvecs[:,1]
+# z=bvecs[:,2]
+#
+# lat,lon=cart2latlon(x,y,z)
+# lmax=100
+# cilm=SHExpandLSQ(S,lat,lon,lmax)
+# sample=np.zeros(len(lat))
+# for i in range(0,len(lat)):
+#     sample[i]=MakeGridPoint(cilm[0],lat[i],lon[i])
 

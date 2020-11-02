@@ -36,13 +36,17 @@ def phiInv(X,Y,Z):
 Uparams = domainParams(0.3, 1.2, -np.pi / 2, np.pi / 2, 0, 1,#3*(1.2-0.3)/(50-1),
                        dims=[50, 50, 4])
 
-bvals = "K:\\Datasets\\HCP_diffusion\\101006\\Diffusion\\Diffusion\\bvals"
-bvecs = "K:\\Datasets\\HCP_diffusion\\101006\\Diffusion\\Diffusion\\bvecs"
+# bvals = "K:\\Datasets\\HCP_diffusion\\101006\\Diffusion\\Diffusion\\bvals"
+# bvecs = "K:\\Datasets\\HCP_diffusion\\101006\\Diffusion\\Diffusion\\bvecs"
+bvals = "/home/uzair/PycharmProjects/Unfolding/data/101006/Diffusion/Diffusion/bvals"
+bvecs = "/home/uzair/PycharmProjects/Unfolding/data/101006/Diffusion/Diffusion/bvecs"
+
 L1 = 99.9E-4
 L2 = 0.1E-4
 L3 = 0.00
 sim=simulateDiffusion.simulateDiffusion(phi,dphi,phiInv,Uparams,L1,L2,L3,bvals=bvals,bvecs=bvecs)
-sim.simulate('K:\\Datasets\\diffusionSimulations\\')
+#sim.simulate('K:\\Datasets\\diffusionSimulations\\')
+sim.simulate("/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations/")
 sim.plotTangVecs()
 
 
