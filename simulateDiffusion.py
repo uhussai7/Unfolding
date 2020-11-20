@@ -6,12 +6,14 @@ from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 unused import
 import matplotlib.pyplot as plt
 
 
-
 def diffusionTensor(L1,L2,L3,v1,v2,v3):
+
+
     P = np.moveaxis( [v1, v2, v3], 0, -1)
     P = np.moveaxis(P, 0, -1)
     Pinv = np.linalg.inv(P)
-    D = np.diag([L1,L2,L3])
+    L = np.asarray([L1,L2,L3])
+    D = np.einsum('l...,lj->...lj',L,np.eye(3))
 
     diffD = np.matmul(np.matmul(P,D),Pinv)
     diffD = np.moveaxis(diffD,-1,0)
@@ -19,10 +21,11 @@ def diffusionTensor(L1,L2,L3,v1,v2,v3):
     return np.moveaxis(diffD, -1, 0)
 
 class simulateDiffusion:
-    def __init__(self, phi,dphi,phiInv, Uparams, L1,L2,L3,bvals, bvecs):
-        self.L1= L1
-        self.L2 = L2
-        self.L3 = L3
+    def __init__(self, phi,dphi,phiInv, Uparams, L1L2L3,bvals, bvecs,N0=20):
+        self.L1= []
+        self.L2 = []
+        self.L3 = []
+        self.L1L2L3=L1L2L3
         self.gtab = gradient_table(bvals,bvecs)
         self.bvals = []
         self.bvecs = [] #this can be taken from hcp file and then use diffusion class to split shells
@@ -43,20 +46,22 @@ class simulateDiffusion:
         self.phi=phi
         self.dphi=dphi
         self.phiInv=phiInv
+        self.N0=N0
 
     def simulate(self,path=None):
 
         #these are XYZ in terms of UVW
         X,Y,Z = self.phiInv(self.Uparams.A,self.Uparams.B,self.Uparams.C )
 
+
         #these are native space parameters
-        Nx = 16
+        Nx = self.N0
         dx = (np.nanmax(X) - np.nanmin(X)) / (Nx - 1)
 
         self.Nparams = domainParams(np.nanmin(X), np.nanmax(X),
                                     np.nanmin(Y), np.nanmax(Y),
-                                    np.nanmin(Z), np.nanmax(Z),
-                                    deltas=[dx, dx, self.Uparams.dc])
+                                    self.Uparams.min_c, self.Uparams.max_c,
+                                    deltas=[dx, dx, dx])
 
         #make the native space coordinates
         print('Making native space coordinates...')
@@ -64,9 +69,9 @@ class simulateDiffusion:
         self.U_nii, self.V_nii, self.W_nii = applyMask(self.U_nii, self.V_nii, self.W_nii,self.Uparams)
         self.v1, self.v2, self.v3 = self.dphi(self.Nparams.A,self.Nparams.B,self.Nparams.C)
 
-
         # make the diffusion tensor
         print('Calculating diffusion tensor...')
+        self.L1,self.L2,self.L3=self.L1L2L3(self.Nparams.A,self.Nparams.B,self.Nparams.C)
         self.dTensor = diffusionTensor(self.L1,self.L2,self.L3,self.v1,self.v2,self.v3)
 
         #generate the signal
@@ -139,9 +144,6 @@ class simulateDiffusion:
         S=S_0*np.exp(-gDg*self.bvalsSingle[B])
 
         return S
-
-
-
 
     def shells(self):
         """
