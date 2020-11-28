@@ -9,33 +9,45 @@ from pyshtools.shtools import SHExpandLSQ
 from pyshtools.shtools import MakeGridPoint
 from pyshtools.shtools import MakeGridPointC
 import os
+import shutil
 
 #ress=['close_high/', 'close_medium/', 'close_low/']
-ress=['_nonConformal/']
-for r in range(0,len(ress)):
-    base="/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations"
-    path=base+ress[r]
-    sub=unfoldSubject.unfoldSubject()
-    #sub.loadCoordinates(path="K:\\Datasets\\diffusionSimulations\\",prefix="")
-    sub.loadCoordinates(path=path,prefix="")
-    sub.coords.computeGradDev()
-    sub.loadDiffusion(path)
-    sub.pushToUnfold(type='diffusion')
-    #sub.diffNoGradDev()
-    upath=path+"Unfolded/"
-    if not os.path.exists(upath):
-        os.mkdir(upath)
-    nib.save(sub.diffUnfold.vol,upath+'diffunfold.nii.gz')
-    nib.save(sub.coords.gradDevUVW_nii,upath+'grad_devUVW.nii.gz')
-    nib.save(sub.coords.gradDevXYZ_nii,upath+'grad_devXYZ.nii.gz')
-    temp_mask=sub.diffUnfold.mask.get_fdata()
-    temp_mask[:,:,-1]=np.NaN
-    temp_mask=nib.Nifti1Image(temp_mask,sub.diffUnfold.mask.affine)
-    #nib.save(sub.diffUnfold.mask,upath+'nodif_brain_mask.nii.gz')
-    nib.save(temp_mask,upath+'nodif_brain_mask.nii.gz')
-    nib.save(sub.coords.X_uvwa_nii,upath+'X.nii.gz')
-    nib.save(sub.coords.Y_uvwa_nii,upath+'Y.nii.gz')
-    nib.save(sub.coords.Z_uvwa_nii,upath+'Z.nii.gz')
+#ress=['close_medium/']
+
+
+
+
+res=[0.2,.175,0.15,.125,0.100]
+#res=[2,1.75,1.5,1.25,1.00]
+#drt=[1.0,1.2,1.4,1.6]
+drt=[1.31]
+for i in range(0,len(res)):
+    for j in range(0,len(drt)):
+        path = "/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations_res-" \
+               + str(int(res[i] * 1000)) + "mm_drt-" + str(int(drt[j] * 100)) + "/"
+        sub=unfoldSubject.unfoldSubject()
+        #sub.loadCoordinates(path="K:\\Datasets\\diffusionSimulations\\",prefix="")
+        sub.loadCoordinates(path=path,prefix="")
+        sub.coords.computeGradDev()
+        sub.loadDiffusion(path)
+        sub.pushToUnfold(type='diffusion')
+        #sub.diffNoGradDev()
+        upath=path+"Unfolded/"
+        if not os.path.exists(upath):
+            os.mkdir(upath)
+        shutil.copyfile(path+"bvals",upath+"bvals")
+        shutil.copyfile(path + "bvecs", upath + "bvecs")
+        nib.save(sub.diffUnfold.vol,upath+'data.nii.gz')
+        nib.save(sub.coords.gradDevUVW_nii,upath+'grad_dev.nii.gz')
+        nib.save(sub.coords.gradDevXYZ_nii,upath+'grad_devXYZ.nii.gz')
+        temp_mask=sub.diffUnfold.mask.get_fdata()
+        temp_mask[:,:,-1]=np.NaN
+        temp_mask=nib.Nifti1Image(temp_mask,sub.diffUnfold.mask.affine)
+        nib.save(sub.diffUnfold.mask,upath+'nodif_brain_mask.nii.gz')
+        # nib.save(temp_mask,upath+'nodif_brain_mask.nii.gz')
+        # nib.save(sub.coords.X_uvwa_nii,upath+'X.nii.gz')
+        # nib.save(sub.coords.Y_uvwa_nii,upath+'Y.nii.gz')
+        # nib.save(sub.coords.Z_uvwa_nii,upath+'Z.nii.gz')
 
 
 #nib.save(sub.diffUnfoldNograd.vol,upath+'diff_nograd.nii.gz')
