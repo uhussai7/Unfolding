@@ -35,14 +35,16 @@ def change_w_scale(w,scale):
     return wrap
 
     #Parameters to vary are drt (rad tang transistion) and resolution
+scale=0.05
 res=[1.75,1.5,1.25,1.00,0.75]
+res=np.asarray(res)
+res=scale*res/100
 drt=np.linspace(0.1,0.25,5)
 w=np.linspace(0.9,0.99,4)
-scale=50
-for i in range(0,len(res)):
+for i in range(2,3):#len(res)):
     print(i)
-    for j in range(0,len(drt)):
-        for k in range(0,len(w)):
+    for j in range(2,3):#len(drt)):
+        for k in range(3,4):#len(w)):
             #phi is the mapping from native to unfold dphi the derivative and phiInv the inverse
             @change_w_scale(w=w[k],scale=scale)
             def phi(X,Y,Z,w=None,scale=None):
@@ -125,7 +127,7 @@ for i in range(0,len(res)):
             Nx = (np.nanmax(X) - np.nanmin(X)) /res[i] + 1
             Uparams = domainParams(u, uu, v, vv, 0, 1*res[i],deltas=[delta,delta,res[i]])
             base="/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations_res-"
-            path=base+str(int(res[i]*100))+"mm_drt-"+str(int(drt[j]*100))+"+w-"+str(int(w[k]*100))+"/"
+            path=base+str(int(res[i]*10000))+"mm_drt-"+str(int(drt[j]*100))+"+w-"+str(int(w[k]*100))+"/"
             if not os.path.exists(path):
                 os.mkdir(path)
 

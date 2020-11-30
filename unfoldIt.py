@@ -17,37 +17,44 @@ import shutil
 
 
 
-res=[0.2,.175,0.15,.125,0.100]
-#res=[2,1.75,1.5,1.25,1.00]
-#drt=[1.0,1.2,1.4,1.6]
-drt=[1.31]
-for i in range(0,len(res)):
-    for j in range(0,len(drt)):
-        path = "/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations_res-" \
-               + str(int(res[i] * 1000)) + "mm_drt-" + str(int(drt[j] * 100)) + "/"
-        sub=unfoldSubject.unfoldSubject()
-        #sub.loadCoordinates(path="K:\\Datasets\\diffusionSimulations\\",prefix="")
-        sub.loadCoordinates(path=path,prefix="")
-        sub.coords.computeGradDev()
-        sub.loadDiffusion(path)
-        sub.pushToUnfold(type='diffusion')
-        #sub.diffNoGradDev()
-        upath=path+"Unfolded/"
-        if not os.path.exists(upath):
-            os.mkdir(upath)
-        shutil.copyfile(path+"bvals",upath+"bvals")
-        shutil.copyfile(path + "bvecs", upath + "bvecs")
-        nib.save(sub.diffUnfold.vol,upath+'data.nii.gz')
-        nib.save(sub.coords.gradDevUVW_nii,upath+'grad_dev.nii.gz')
-        nib.save(sub.coords.gradDevXYZ_nii,upath+'grad_devXYZ.nii.gz')
-        temp_mask=sub.diffUnfold.mask.get_fdata()
-        temp_mask[:,:,-1]=np.NaN
-        temp_mask=nib.Nifti1Image(temp_mask,sub.diffUnfold.mask.affine)
-        nib.save(sub.diffUnfold.mask,upath+'nodif_brain_mask.nii.gz')
-        # nib.save(temp_mask,upath+'nodif_brain_mask.nii.gz')
-        # nib.save(sub.coords.X_uvwa_nii,upath+'X.nii.gz')
-        # nib.save(sub.coords.Y_uvwa_nii,upath+'Y.nii.gz')
-        # nib.save(sub.coords.Z_uvwa_nii,upath+'Z.nii.gz')
+scale=0.05
+res=[1.75,1.5,1.25,1.00,0.75]
+res=np.asarray(res)
+res=scale*res/100
+drt=np.linspace(0.1,0.25,5)
+w=np.linspace(0.9,0.99,4)
+for i in range(2,3):#len(res)):
+    print(i)
+    for j in range(2,3):#len(drt)):
+        for k in range(3,4):#len(w)):
+            base = "/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations_res-"
+            path = base + str(int(res[i] * 10000)) + "mm_drt-" + str(int(drt[j] * 100)) + "+w-" + str(
+    int(w[k] * 100)) + "/"
+
+            #path="/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations_nonConformal/"
+            sub=unfoldSubject.unfoldSubject()
+            #sub.loadCoordinates(path="K:\\Datasets\\diffusionSimulations\\",prefix="")
+            sub.loadCoordinates(path=path,prefix="")
+            sub.coords.computeGradDev()
+            sub.loadDiffusion(path)
+            sub.pushToUnfold(type='diffusion')
+            #sub.diffNoGradDev()
+            upath=path+"Unfolded/"
+            if not os.path.exists(upath):
+                os.mkdir(upath)
+            shutil.copyfile(path+"bvals",upath+"bvals")
+            shutil.copyfile(path + "bvecs", upath + "bvecs")
+            nib.save(sub.diffUnfold.vol,upath+'data.nii.gz')
+            nib.save(sub.coords.gradDevUVW_nii,upath+'grad_dev.nii.gz')
+            nib.save(sub.coords.gradDevXYZ_nii,upath+'grad_devXYZ.nii.gz')
+            temp_mask=sub.diffUnfold.mask.get_fdata()
+            temp_mask[:,:,-1]=np.NaN
+            temp_mask=nib.Nifti1Image(temp_mask,sub.diffUnfold.mask.affine)
+            nib.save(sub.diffUnfold.mask,upath+'nodif_brain_mask.nii.gz')
+                        # nib.save(temp_mask,upath+'nodif_brain_mask.nii.gz')
+                        # nib.save(sub.coords.X_uvwa_nii,upath+'X.nii.gz')
+                        # nib.save(sub.coords.Y_uvwa_nii,upath+'Y.nii.gz')
+                        # nib.save(sub.coords.Z_uvwa_nii,upath+'Z.nii.gz')
 
 
 #nib.save(sub.diffUnfoldNograd.vol,upath+'diff_nograd.nii.gz')

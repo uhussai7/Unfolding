@@ -58,9 +58,13 @@ class simulateDiffusion:
         Nx = self.N0
         dx = (np.nanmax(X) - np.nanmin(X)) / (Nx - 1)
 
+        # self.Nparams = domainParams(np.nanmin(X), np.nanmax(X),
+        #                             np.nanmin(Y), np.nanmax(Y),
+        #                             self.Uparams.min_c, self.Uparams.max_c,
+        #                             deltas=[dx, dx, dx])
         self.Nparams = domainParams(np.nanmin(X), np.nanmax(X),
                                     np.nanmin(Y), np.nanmax(Y),
-                                    self.Uparams.min_c, self.Uparams.max_c,
+                                    np.nanmin(Z), np.nanmax(Z),
                                     deltas=[dx, dx, dx])
 
         #make the native space coordinates

@@ -4,7 +4,7 @@ import numpy as np
 from scipy.interpolate import griddata
 from dipy.viz import window, actor, has_fury, colormap
 from dipy.tracking.streamline import Streamlines
-
+import copy
 
 def pointsPerLine(streamlines):
     N_lines=len(streamlines)
@@ -53,19 +53,32 @@ class tracking:
                                            self.stopping_criterion,
                                            self.seeds,
                                            self.affine,
-                                           step_size=self.affine[0,0]/10)
+                                           step_size=self.affine[0,0]/4)
             self.streamlines=Streamlines(streamlines_generator)
 
 
         else:
             shape=self.graddev.shape
             self.graddev=self.graddev.reshape(shape[0:3]+ (3, 3), order='F')
-            self.graddev=self.graddev.reshape([-1,3,3])+np.eye(3)
+            #self.graddev[:, :, :, :, 2] = 0
+            #self.graddev[:, :, :, 2, :] = 0
+            #self.graddev[:, :, :, 2, 2] = -1
+
+            self.graddev=(self.graddev.reshape([-1,3,3])+np.eye(3))
             self.graddev=self.graddev.reshape(shape[0:3]+(3,3))
 
             #multiply by the jacobian
-            new_peak_dirs = np.einsum('ijkab,ijkvb->ijkva',
+            new_peak_dirsp = np.einsum('ijkab,ijkvb->aijkv',
                                       self.graddev, self.peaks.peak_dirs)
+            shape=new_peak_dirsp.shape
+            new_peak_dirsp=new_peak_dirsp.reshape(3,-1)
+            new_peak_dirs=copy.deepcopy(new_peak_dirsp)
+            for i in range(0,new_peak_dirs.shape[-1]):
+                norm=np.linalg.norm(new_peak_dirsp[:, i])
+                if norm!=0:
+                    new_peak_dirs[:,i]=new_peak_dirsp[:,i]/norm
+            new_peak_dirs = new_peak_dirs.reshape(shape)
+            new_peak_dirs = np.moveaxis(new_peak_dirs,0,-1)
             new_peak_dirs = new_peak_dirs.reshape([-1, self.peaks.peak_indices.shape[-1], 3])
             #update self.peaks.peak_indices
             peak_indices=np.zeros(self.peaks.peak_indices.shape)
@@ -81,7 +94,7 @@ class tracking:
                                              self.stopping_criterion,
                                              self.seeds,
                                              self.affine,
-                                             step_size=self.affine[0, 0] / 4)
+                                             step_size=self.affine[0, 0]/4)
 
             self.streamlines=Streamlines(streamlines_generator)
             self.NpointsPerLine=pointsPerLine(self.streamlines)

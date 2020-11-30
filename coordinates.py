@@ -119,7 +119,7 @@ def applyMask(U, V, W, dParams):
 def toWorld(nii,inds):
     world = []
     for ind in inds:
-        world.append(np.matmul(nii.affine,np.append(ind,1) )[0:3])
+        world.append(np.matmul(nii.affine,np.append(ind,1))[0:3])
     return np.asarray(world)
 
 def toInds(nii,worlds):
@@ -307,6 +307,9 @@ class coordinates:
         #self.Wa_xyz_nii = self.mean_w * (self.Wa_xyz_nii - np.nanmin(self.Wa_xyz_nii)) / \
         #                  np.nanmax(self.Wa_xyz_nii - 1*np.nanmin(self.Wa_xyz_nii))
 
+
+
+
         self.grads = []
         self.cumsum=[]
         self.X_uvw_low = []
@@ -319,7 +322,7 @@ class coordinates:
         self.Wa = self.Wa_xyz_nii[inds[:,0],inds[:,1],inds[:,2]]
 
         #making the interpolator
-        function='multiquadric' #this is for rbf
+        function='linear' #this is for rbf
         print('Making uvwa in terms of xyz linear interpolator')
         points = np.asarray([self.X, self.Y, self.Z]).transpose()
         self.FUa_xyz = LinearNDInterpolator(points, self.Ua)
@@ -390,7 +393,7 @@ class coordinates:
         grads = np.zeros((C[0].shape)+(3,3))
 
         for i in range(0,3):
-            grads[:,:,:,i,0], grads[:,:,:,i,1],grads[:,:,:,i,2]=self.gradientNaN(C[i])
+            grads[:,:,:,i,0], grads[:,:,:,i,1],grads[:,:,:,i,2]=self.gradientNaN(C[i])/self.Ua_xyz_nii.affine[0][0]
 
         grads=grads-np.identity(3)
         self.gradDevXYZ_nii=grads.reshape(grads.shape[0:3]+(9,),order='F') #not yet nifti
@@ -411,7 +414,7 @@ class coordinates:
         Yuvw[condition] = 0
         Zuvw[condition] = 0
 
-        function='multiquadric' #for rbf
+        function='linear' #for rbf
         for i in range(0,9):
             points, S = getPointsData(self.gradDevXYZ_nii,i)
             # interpolator=LinearNDInterpolator(points,S)

@@ -45,16 +45,16 @@ def loc_track(path,default_sphere):
     data[np.isnan(data) == 1] = 0
     mask, affine = load_nifti(path + 'nodif_brain_mask.nii.gz')
     mask[np.isnan(mask) == 1] = 0
-    mask[:,:,1:]=0
+    mask[:,:,2:]=0
     gtab = gradient_table(path + 'bvals', path + 'bvecs')
     if os.path.exists(path + 'grad_dev.nii.gz'):
         gd, affine_g = load_nifti(path + 'grad_dev.nii.gz')
     else:
         gd=None
-    csa_model = CsaOdfModel(gtab, sh_order=10)
+    csa_model = CsaOdfModel(gtab, smooth=1, sh_order=12)
     peaks = peaks_from_model(csa_model, data, default_sphere,
                              relative_peak_threshold=0.99,
-                             min_separation_angle=45,
+                             min_separation_angle=25,
                              mask=mask)
     seedss = copy.deepcopy(mask)
     seeds = utils.seeds_from_mask(seedss, affine, [2, 2, 2])
@@ -89,29 +89,30 @@ def unfold2nativeStreamlines(tracking,coords):
 
 
 #loop over all states and save the streamlines
-#res=[2,1.75,1.5,1.25,1.00]
-res=[0.2,0.175,0.15,0.125,0.100]
-#drt=[1.0,1.2,1.4,1.6]
-#drt=[1.1,1.3]
-drt=[1.31]
-
-#res=[0.15]
-#drt=[1.4]
-for i in range(0,len(res)):
-    for j in range(0,len(drt)):
-        path = "/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations_res-" \
-                + str(int(res[i] * 1000)) + "mm_drt-" + str(int(drt[j] * 100)) + "/"
-        #path = "/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations/"
-        ntracking = loc_track(path ,default_sphere)
-        coords = coordinates.coordinates(path,'')
-        utracking = loc_track(path+'Unfolded/',default_sphere)
-        u2n_streamlines=unfold2nativeStreamlines(utracking,coords)
-        streamline.save_vtk_streamlines(ntracking.streamlines,
-                                        path+"native_streamlines.vtk")
-        streamline.save_vtk_streamlines(utracking.streamlines,
-                                        path + "Unfolded/unfold_streamlines.vtk")
-        streamline.save_vtk_streamlines(u2n_streamlines,
-                                        path + "from_unfold_streamlines.vtk")
+scale=50
+res=[1.75,1.5,1.25,1.00,0.75]
+res=np.asarray(res)
+res=scale*res/100
+drt=np.linspace(0.1,0.25,5)
+w=np.linspace(0.9,0.99,4)
+for i in range(2,3):#len(res)):
+    print(i)
+    for j in range(2,3):#len(drt)):
+        for k in range(3,4):#len(w)):
+            base = "/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations_res-"
+            path = base + str(int(res[i] * 10000)) + "mm_drt-" + str(int(drt[j] * 100)) + "+w-" + str(
+                int(w[k] * 100)) + "/"
+            #path="/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations_nonConformal_scale/"
+            ntracking = loc_track(path ,default_sphere)
+            coords = coordinates.coordinates(path,'')
+            utracking = loc_track(path+'Unfolded/',default_sphere)
+            u2n_streamlines=unfold2nativeStreamlines(utracking,coords)
+            streamline.save_vtk_streamlines(ntracking.streamlines,
+                                            path+"native_streamlines.vtk")
+            streamline.save_vtk_streamlines(utracking.streamlines,
+                                            path + "Unfolded/unfold_streamlines.vtk")
+            streamline.save_vtk_streamlines(u2n_streamlines,
+                                path + "from_unfold_streamlines.vtk")
 
 
 def plot_streamlines(streamlines):
