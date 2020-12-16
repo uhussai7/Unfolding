@@ -322,7 +322,8 @@ class coordinates:
         self.Wa = self.Wa_xyz_nii[inds[:,0],inds[:,1],inds[:,2]]
 
         #making the interpolator
-        function='linear' #this is for rbf
+        function='multiquadric' #this is for rbf
+        eps=None
         print('Making uvwa in terms of xyz linear interpolator')
         points = np.asarray([self.X, self.Y, self.Z]).transpose()
         self.FUa_xyz = LinearNDInterpolator(points, self.Ua)
@@ -357,7 +358,7 @@ class coordinates:
         :return:
         """
         print("Creating cartesian coordinates in terms of mean arc length unfolded space...")
-        res = self.U_xyz_nii.header['pixdim'][1]
+        res = 0.71*self.U_xyz_nii.header['pixdim'][1]
         #
         #create the unfolded space (arclength corrected) domain parameter class instance
         self.Uparams = domainParams(np.nanmin(self.Ua), np.nanmax(self.Ua),  # these are arclength corrected
@@ -414,7 +415,7 @@ class coordinates:
         Yuvw[condition] = 0
         Zuvw[condition] = 0
 
-        function='linear' #for rbf
+        function='multiquadric' #for rbf
         for i in range(0,9):
             points, S = getPointsData(self.gradDevXYZ_nii,i)
             # interpolator=LinearNDInterpolator(points,S)

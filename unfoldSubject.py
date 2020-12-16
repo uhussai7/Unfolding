@@ -34,7 +34,7 @@ class unfoldSubject:
         if type=='diffusion':
             volume_nii=copy.deepcopy(self.diff.vol)
         interp='nearest'
-        function='linear'
+        function='multiquadric'
         Xuvw = self.coords.X_uvwa_nii.get_data()
         Yuvw = self.coords.Y_uvwa_nii.get_data()
         Zuvw = self.coords.Z_uvwa_nii.get_data()
