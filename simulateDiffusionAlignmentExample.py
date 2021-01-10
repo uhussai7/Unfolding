@@ -4,7 +4,7 @@ from coordinates import domainParams
 import os
 import matplotlib.pyplot as plt
 import nibabel as nib
-
+import cmath
 
 #here we want to gererate some volumes to cover the parameter space of possible fiber states.
 #We will vary the following parameters
@@ -20,10 +20,10 @@ import nibabel as nib
 
 
 
-def L1L2L3_drt_w_scale(drt,w,scale):
+def L1L2L3_drt_w_scale(drt,w,scale,beta):
     def wrap(func):
-        def inner(X,Y,Z,drt=drt,w=w,scale=scale):
-            return func(X,Y,Z,drt=drt,w=w,scale=scale)
+        def inner(X,Y,Z,drt=drt,w=w,scale=scale,beta=beta):
+            return func(X,Y,Z,drt=drt,w=w,scale=scale,beta=beta)
         return inner
     return wrap
 
@@ -35,15 +35,15 @@ def change_w_scale(w,scale,beta):
     return wrap
 
     #Parameters to vary are drt (rad tang transistion) and resolution
-scale=100
+scale=50
 #res=[1.75,1.5,1.25,1.00,0.75]
 res=[1.25]
 res=np.asarray(res)
 res=scale*res/100
 #drt=np.linspace(0.1,0.25,5)
-drt=[1.5]
+drt=[0.2]
 #w=np.linspace(0.9,0.99,4)
-w=[0.99]
+w=[0.9]
 beta=np.linspace(0,np.pi/4,5)
 for i in range(0,len(res)):
     print(i)
@@ -52,7 +52,7 @@ for i in range(0,len(res)):
             for b in range(0,len(beta)):
             #phi is the mapping from native to unfold dphi the derivative and phiInv the inverse
                 @change_w_scale(w=w[k],scale=scale,beta=None)
-                def phi(X,Y,Z,w=None,scale=None):
+                def phi(X,Y,Z,w=None,scale=None,beta=None):
                     if scale is None: scale=5
                     if w is None: w=1
                     C=X+Y*1j
@@ -60,12 +60,14 @@ for i in range(0,len(res)):
                     Cout=np.log(0.5*(A+np.sqrt(A*A-4*w)))
                     return np.real(Cout), np.imag(Cout), Z
 
-                @change_w_scale(w=w[k], scale=scale,beta=beta)
+                @change_w_scale(w=w[k], scale=scale,beta=beta[b])
                 def dphi(X,Y,Z,w=None, scale=None, beta=None):
                     if scale is None: scale = 5
                     if w is None: w=1
-                    if beta in None: beta=0
+                    if beta is None: beta=0
+                    rot=cmath.rect(1,beta)
                     C=X+Y*1j
+                    C=C*rot
                     A = C / scale + w +1
                     dCout= 1/np.sqrt(-4 * w + A*A)*(1/scale)
                     norm = np.sqrt(np.real(dCout)*np.real(dCout) +np.imag(dCout)*np.imag(dCout))
@@ -76,8 +78,8 @@ for i in range(0,len(res)):
                     v3 = [zeros, zeros, ones]
                     return v1, v2, v3
 
-                @change_w_scale(w=w[k], scale=scale)
-                def phiInv(U,V,W,w=None,scale=None):
+                @change_w_scale(w=w[k], scale=scale,beta=None)
+                def phiInv(U,V,W,w=None,scale=None,beta=None):
                     if scale is None: scale = 5
                     if w is None: w=1
                     C = U + V * 1j
@@ -85,17 +87,20 @@ for i in range(0,len(res)):
                     result = scale*(Cout-1 + w*(1/Cout-1))
                     return np.real(result), np.imag(result), W
 
-                @L1L2L3_drt_w_scale(drt=drt[j],w=w[k],scale=scale)
+                @L1L2L3_drt_w_scale(drt=drt[j],w=w[k],scale=scale,beta=None)
                 @np.vectorize
-                def L1L2L3(X,Y,Z,w=None,scale=None,drt=None):
+                def L1L2L3(X,Y,Z,w=None,scale=None,drt=None,beta=None):
                     if scale is None: scale = 5
                     #if drt is None: drt=1.5 #drt is the radial coordinate where we transition from tang to rad
                     if w is None: w=1
+                    if beta is None: beta=0
+
                     l1 = 99.9E-4
                     l2 = 0.1E-4
                     l3 = 0.00
-
+                    rot = cmath.rect(1, beta)
                     C = X + Y * 1j
+                    C = C * rot
                     A = C / scale + w+1
                     Cout = np.log(0.5*(A+np.sqrt(A*A-4*w)))
                     U= np.real(Cout)
@@ -133,7 +138,8 @@ for i in range(0,len(res)):
                 Nx = (np.nanmax(X) - np.nanmin(X)) /res[i] + 1
                 Uparams = domainParams(u, uu, v, vv, 0, 1*res[i],deltas=[delta,delta,res[i]])
                 base="/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulationsAlignment_res-"
-                path=base+str(int(res[i]*10000))+"mm_drt-"+str(int(drt[j]*100))+"_w-"+str(int(w[k]*100))+"_beta-"+"/"
+                path=base+str(int(res[i]*10000))+"mm_drt-"+str(int(drt[j]*100))+"_w-"+str(int(w[
+                                                                                                  k]*100))+"_beta-"+str(int(beta[b]*100))+"/"
                 if not os.path.exists(path):
                     os.mkdir(path)
 

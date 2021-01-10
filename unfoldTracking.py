@@ -175,11 +175,12 @@ class tracking:
 
     def localTracking(self):
         if self.graddev is None:
+            print(self.affine[0,0]/4)
             streamlines_generator=LocalTracking(self.peaks,
                                            self.stopping_criterion,
                                            self.seeds,
                                            self.affine,
-                                           step_size=self.affine[0,0]/4)
+                                           step_size=abs(self.affine[0,0]/4))
             self.streamlines=Streamlines(streamlines_generator)
 
 
@@ -197,9 +198,9 @@ class tracking:
 
             # self.graddev=self.graddev.reshape(shape[0:3]+ (3, 3))
 
-            self.graddev[:, :, :, :, 2] = 0
-            self.graddev[:, :, :, 2, :] = 0
-            self.graddev[:, :, :, 2, 2] = -1
+            # self.graddev[:, :, :, :, 2] = 0
+            # self.graddev[:, :, :, 2, :] = 0
+            # self.graddev[:, :, :, 2, 2] = -1
 
             self.graddev=(1*self.graddev.reshape([-1,3,3])+np.eye(3))
             self.graddev=self.graddev.reshape(shape[0:3]+(3,3))
@@ -232,7 +233,7 @@ class tracking:
                                                   self.stopping_criterion,
                                                   self.seeds,
                                                   self.affine,
-                                                  step_size=self.affine[0, 0] / 4)
+                                                  step_size=abs(self.affine[0,0]/4))
 
             self.streamlines = Streamlines(streamlines_generator)
             self.NpointsPerLine = pointsPerLine(self.streamlines)

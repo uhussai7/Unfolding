@@ -16,8 +16,9 @@ from dipy.tracking.metrics import set_number_of_points
 from dipy.tracking.streamline import select_random_set_of_streamlines
 from unfoldTracking import connectedInds
 import copy
+from coordinates import toInds
 import sys
-
+from PIL import Image
 
 def phiInv(U, V, W, w=None, scale=None):
     if scale is None: scale = 5
@@ -111,6 +112,7 @@ class linesFromSims:
         self.nlines=nlines
         self.ulines=ulines
 
+
     def filter(self,lines):
         # lines that go though seed region
         testmask=copy.deepcopy(self.mask)
@@ -120,7 +122,7 @@ class linesFromSims:
         testmask[(self.radtang == 2) & (self.angles == 1)] = 1
         lines.seedlines = Streamlines(target(lines.lines, self.mask_nii.affine, testmask))
 
-        #tight seeds (close to axis of symmetry)
+        # seeds
         testmask[:] = 0
         testmask[(self.radtang == 2) & (self.angles == 1)] = 1
         lines.seedlines = Streamlines(target(lines.lines, self.mask_nii.affine, testmask))
@@ -136,15 +138,51 @@ class linesFromSims:
         #lines that fail to cross over
         lines.lines_crsovr_fail = Streamlines(target(lines.seedlines, self.mask_nii.affine, testmask, include=False))
 
+
+
+    def lineCount(self,lines):
+        sz=self.mask.shape
+        tp_inds_linear=np.zeros(sz[0]*sz[1]*sz[2])
+        for line in lines:
+            inds=np.asarray(toInds(self.mask_nii,line).round().astype(int))
+            lin_inds=np.ravel_multi_index([inds[:, 0], inds[:, 1], inds[:, 2]], (sz[0], sz[1], sz[2]))
+            tp_inds_linear[lin_inds]=tp_inds_linear[lin_inds]+1
+        return  tp_inds_linear
+
+
     # def symmetry(self):
     #     #makesymmetry masks
     #     right=
+    def thresholdSenSpec(self,lines, threshold):
+
+        #occupation by threshold
+        inds=self.lineCount(lines.seedlines)
+        inds=inds.reshape(self.mask.shape)
+        test=inds
+
+        tp = len(np.where(((test>=threshold) & (self.radtang==2))==True)[0])
+        fn = len(np.where(((test < threshold) & (self.radtang == 2)) == True)[0])
+        p = len(np.where(self.radtang==2)[0])
+
+        fp = len(np.where(((test>=threshold) & (self.radtang==1))==True)[0])
+        tn = len(np.where(((test < threshold) & (self.radtang == 1)) == True)[0])
+        n = len(np.where(self.radtang==1)[0])
 
 
+        if p==0:
+            sens=np.NaN
+        else:
+            sens=tp/p
+
+        if n ==0:
+            spec=np.NaN
+        else:
+            spec=tn/n
+
+        return sens, spec
 
 
-
-scale=75
+scale=50
 res=np.linspace(1.7,1.00,8)
 drt=np.linspace(0.1,0.3,5)
 ang_thr=np.linspace(20,90,8)
@@ -154,21 +192,21 @@ w=np.linspace(0,0.99,4)
 # j_io=int(sys.argv[2]) #drt
 # k_io=int(sys.argv[3]) #ang_thr
 
-i_io=6
-j_io=1
-k_io=3
-l_io=-1
-
-base = "/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations_scale_50_res-"
-npath = base + str(int(res[i_io] * 1000)) + "um_drt-" + str(int(drt[j_io] * 100)) + "_w-" + \
-        str(int(round(w[l_io], 2) * 100)) + "_angthr-" + str(int(ang_thr[k_io])) + "/"
-
-nlines=lines(npath+'native_streamlines.vtk')
-ulines=lines(npath+'from_unfold_streamlines.vtk')
-simlines=linesFromSims(npath,nlines,ulines)
-
-simlines.filter(simlines.nlines)
-simlines.filter(simlines.ulines)
+# i_io=6
+# j_io=1
+# k_io=3
+# l_io=-1
+#
+# base = "/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations_scale_50_res-"
+# npath = base + str(int(res[i_io] * 1000)) + "um_drt-" + str(int(drt[j_io] * 100)) + "_w-" + \
+#         str(int(round(w[l_io], 2) * 100)) + "_angthr-" + str(int(ang_thr[k_io])) + "/"
+#
+# nlines=lines(npath+'native_streamlines.vtk')
+# ulines=lines(npath+'from_unfold_streamlines.vtk')
+# simlines=linesFromSims(npath,nlines,ulines)
+#
+# simlines.filter(simlines.nlines)
+# simlines.filter(simlines.ulines)
 
 #plots for native space
 # plot_lines(simlines.nlines.lines)
@@ -184,9 +222,244 @@ simlines.filter(simlines.ulines)
 
 
 #numbers in each plot
-crs_over_proportion = np.zeros([8,5,8,2])
-crs_over_fail_proportion = np.zeros([8,5,8,2])
+# crs_over_proportion = np.zeros([8,5,8,2])
+# crs_over_fail_proportion = np.zeros([8,5,8,2])
+#
+# for i_io in range(0,len(res)):
+#     print("i",i_io)
+#     for j_io in range(0,len(drt)):
+#         print("i j", i_io, j_io)
+#         for k_io in range(0, len(ang_thr)):
+#             for l_io in range(-1,0):#len(w)):
+#                 print(l_io)
+#                 base = "/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations_scale_50_res-"
+#                 npath = base + str(int(res[i_io] * 1000)) + "um_drt-" + str(int(drt[j_io] * 100)) + "_w-" + \
+#                         str(int(round(w[l_io], 2) * 100)) + "_angthr-" + str(int(ang_thr[k_io])) + "/"
+#
+#                 nlines = lines(npath + 'native_streamlines.vtk')
+#                 ulines = lines(npath + 'from_unfold_streamlines.vtk')
+#                 simlines = linesFromSims(npath, nlines, ulines)
+#
+#                 simlines.filter(simlines.nlines)
+#                 simlines.filter(simlines.ulines)
+#
+#                 crs_over_proportion[i_io,j_io,k_io,0]=len(simlines.nlines.lines_crsovr)/len(simlines.nlines.seedlines)
+#                 crs_over_proportion[i_io,j_io,k_io,1]=len(simlines.ulines.lines_crsovr)/len(simlines.ulines.seedlines)
+#
+#                 crs_over_fail_proportion[i_io,j_io,k_io,0]=len(simlines.nlines.lines_crsovr_fail)/len(
+#                     simlines.nlines.seedlines)
+#                 crs_over_fail_proportion[i_io,j_io,k_io,1]=len(simlines.ulines.lines_crsovr_fail)/len(
+#                     simlines.ulines.seedlines)
+#
+#
+#
+# #crossover plot
+# p=1
+# fig, ax = plt.subplots(8,5)
+# fig.set_figheight(18)
+# fig.set_figwidth(10)
+# fig.subplots_adjust(wspace=1)
+# fig.subplots_adjust(hspace=1)
+#
+# for i in range(0,len(res)):
+#     for j in range(0,len(drt)):
+#         plotname=str((round(res[i],1))) + "mm drt" + str(round(drt[j] * 10,1))
+#         ##plt.figure(p)
+#         ax[i,j].set_title(plotname)
+#         if( i==0 and j==0):
+#             #ax[i,j].set_ylabel('Sensitivity')
+#             #ax[i, j].set_ylabel('Specificity')
+#             ax[i, j].set_xlabel('Angle Thres.')
+#
+#         ax[i,j].set_xlim([20,95])
+#         ax[i, j].set_ylim([-0.1, 1.1])
+#         y=crs_over_proportion[i,j,:,0]
+#         x=ang_thr
+#         ax[i,j].plot(x,y,color='blue')
+#         y=crs_over_proportion[i,j,:,1]
+#         ax[i,j].plot(x,y,color='orange')
+#
+# #crossover fail plot
+# p=1
+# fig, ax = plt.subplots(8,5)
+# fig.set_figheight(18)
+# fig.set_figwidth(10)
+# fig.subplots_adjust(wspace=1)
+# fig.subplots_adjust(hspace=1)
+#
+# for i in range(0,len(res)):
+#     for j in range(0,len(drt)):
+#         plotname=str((round(res[i],1))) + "mm drt" + str(round(drt[j] * 10,1))
+#         ##plt.figure(p)
+#         ax[i,j].set_title(plotname)
+#         if( i==0 and j==0):
+#             #ax[i,j].set_ylabel('Sensitivity')
+#             #ax[i, j].set_ylabel('Specificity')
+#             ax[i, j].set_xlabel('Angle Thres.')
+#
+#         ax[i,j].set_xlim([20,95])
+#         ax[i, j].set_ylim([-0.1, 1.1])
+#         y=crs_over_fail_proportion[i,j,:,0]
+#         x=ang_thr
+#         ax[i,j].plot(x,y,color='blue')
+#         y=crs_over_fail_proportion[i,j,:,1]
+#         ax[i,j].plot(x,y,color='orange')
+#
+# #where are the failures?
+# nfig, nax = plt.subplots()
+# ufig, uax = plt.subplots()
+# nax.axis('equal')
+# uax.axis('equal')
+# for i_io in range(0,len(res)):
+#     print("i",i_io)
+#     for j_io in range(0,len(drt)):
+#         print("i j", i_io, j_io)
+#         for k_io in range(0, len(ang_thr)):
+#             for l_io in range(-1,0):#len(w)):
+#                 print(l_io)
+#                 base = "/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations_scale_50_res-"
+#                 npath = base + str(int(res[i_io] * 1000)) + "um_drt-" + str(int(drt[j_io] * 100)) + "_w-" + \
+#                         str(int(round(w[l_io], 2) * 100)) + "_angthr-" + str(int(ang_thr[k_io])) + "/"
+#
+#                 nlines = lines(npath + 'native_streamlines.vtk')
+#                 ulines = lines(npath + 'from_unfold_streamlines.vtk')
+#                 simlines = linesFromSims(npath, nlines, ulines)
+#
+#                 simlines.filter(simlines.nlines)
+#                 simlines.filter(simlines.ulines)
+#
+#                 for line in simlines.nlines.lines_crsovr_fail:
+#                     nax.plot(line[:,0],line[:,1],alpha=0.075,color="blue")
+#
+#                 for line in simlines.ulines.lines_crsovr_fail:
+#                     uax.plot(line[:,0],line[:,1],alpha=0.075,color="orange")
+#
+# #where are the winners?
+# nfigw, naxw = plt.subplots()
+# ufigw, uaxw = plt.subplots()
+# naxw.axis('equal')
+# uaxw.axis('equal')
+# for i_io in range(0,len(res)):
+#     print("i",i_io)
+#     for j_io in range(0,len(drt)):
+#         print("i j", i_io, j_io)
+#         for k_io in range(0, len(ang_thr)):
+#             for l_io in range(-1,0):#len(w)):
+#                 print(l_io)
+#                 base = "/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations_scale_50_res-"
+#                 npath = base + str(int(res[i_io] * 1000)) + "um_drt-" + str(int(drt[j_io] * 100)) + "_w-" + \
+#                         str(int(round(w[l_io], 2) * 100)) + "_angthr-" + str(int(ang_thr[k_io])) + "/"
+#
+#                 nlines = lines(npath + 'native_streamlines.vtk')
+#                 ulines = lines(npath + 'from_unfold_streamlines.vtk')
+#                 simlines = linesFromSims(npath, nlines, ulines)
+#
+#                 simlines.filter(simlines.nlines)
+#                 simlines.filter(simlines.ulines)
+#
+#                 for line in simlines.nlines.lines_crsovr:
+#                     naxw.plot(line[:,1],line[:,2],alpha=0.075,color="blue")
+#
+#                 for line in simlines.ulines.lines_crsovr:
+#                     uaxw.plot(line[:,1],line[:,2],alpha=0.075,color="orange")
 
+#threshold sen spec
+# sens=np.zeros([8,5,8,2])
+# spec=np.zeros([8,5,8,2])
+# threshold=20
+# for i_io in range(0,len(res)):
+#     print("i",i_io)
+#     for j_io in range(0,len(drt)):
+#         print("i j", i_io, j_io)
+#         for k_io in range(0, len(ang_thr)):
+#             for l_io in range(-1,0):#len(w)):
+#                 print(l_io)
+#                 base = "/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations_scale_50_res-"
+#                 npath = base + str(int(res[i_io] * 1000)) + "um_drt-" + str(int(drt[j_io] * 100)) + "_w-" + \
+#                         str(int(round(w[l_io], 2) * 100)) + "_angthr-" + str(int(ang_thr[k_io])) + "/"
+#
+#                 nlines = lines(npath + 'native_streamlines.vtk')
+#                 ulines = lines(npath + 'from_unfold_streamlines.vtk')
+#                 simlines = linesFromSims(npath, nlines, ulines)
+#
+#                 simlines.filter(simlines.nlines)
+#                 simlines.filter(simlines.ulines)
+#
+#                 sens[i_io,j_io,k_io,0],spec[i_io,j_io,k_io,0]= simlines.thresholdSenSpec(simlines.nlines,threshold)
+#                 sens[i_io, j_io, k_io, 1], spec[i_io, j_io, k_io, 1] = simlines.thresholdSenSpec(
+#                     simlines.ulines, threshold)
+
+
+#plot of threshold sens
+# p=1
+# fig, ax = plt.subplots(8,5)
+# fig.set_figheight(18)
+# fig.set_figwidth(10)
+# fig.subplots_adjust(wspace=1)
+# fig.subplots_adjust(hspace=1)
+#
+# for i in range(0,len(res)):
+#     for j in range(0,len(drt)):
+#         plotname=str((round(res[i],1))) + "mm drt" + str(round(drt[j] * 10,1))
+#         ##plt.figure(p)
+#         ax[i,j].set_title(plotname)
+#         if( i==0 and j==0):
+#             #ax[i,j].set_ylabel('Sensitivity')
+#             ax[i, j].set_ylabel('Specificity')
+#             ax[i, j].set_xlabel('Angle Thres.')
+#
+#         ax[i,j].set_xlim([20,95])
+#         ax[i, j].set_ylim([-0.1, 1.1])
+#         y=spec[i,j,:,0]
+#         x=ang_thr
+#         ax[i,j].plot(x,y,color='blue')
+#         y=spec[i,j,:,1]
+#         ax[i,j].plot(x,y,color='orange')
+
+# roc curve calculation for typical simulations angglethreshold
+#threshold sen spec
+# sens=np.zeros([8,5,8,2])
+# spec=np.zeros([8,5,8,2])
+# thres=np.linspace(0,100,10)
+# i_io=3
+# j_io=2
+# l_io=-1
+# spec_roc=np.zeros([10,8,2])
+# sens_roc=np.zeros([10,8,2])
+# for ttt in range(0,len(thres)):
+#     for k_io in range(0, len(ang_thr)):
+#         print(ttt,k_io)
+#         base = "/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations_scale_50_res-"
+#         npath = base + str(int(res[i_io] * 1000)) + "um_drt-" + str(int(drt[j_io] * 100)) + "_w-" + \
+#                 str(int(round(w[l_io], 2) * 100)) + "_angthr-" + str(int(ang_thr[k_io])) + "/"
+#
+#         nlines = lines(npath + 'native_streamlines.vtk')
+#         ulines = lines(npath + 'from_unfold_streamlines.vtk')
+#         simlines = linesFromSims(npath, nlines, ulines)
+#
+#         simlines.filter(simlines.nlines)
+#         simlines.filter(simlines.ulines)
+#
+#         sens_roc[ttt,k_io,0],spec_roc[ttt,k_io,0]= simlines.thresholdSenSpec(simlines.nlines,thres[ttt])
+#         sens_roc[ttt, k_io, 1], spec_roc[ttt, k_io, 1] = simlines.thresholdSenSpec(simlines.ulines, thres[ttt])
+
+#plot the roc curve
+# fig, ax=plt.subplots(8,1)
+# for k_io in range(0, len(ang_thr)):
+#     print(ttt, k_io)
+#     y = sens_roc[:, k_io, 0]
+#     x = 1-spec_roc[:, k_io, 0]
+#     ax[k_io].set_xlim([0, 1])
+#     ax[k_io].set_ylim([0, 1])
+#     ax[k_io].axis('equal')
+#     ax[k_io].plot(x,y,color='blue')
+#     y = sens_roc[:, k_io, 1]
+#     x = 1-spec_roc[:, k_io, 1]
+#     ax[k_io].plot(x,y,color='orange')
+
+n_master_img=np.zeros([19,32])
+u_master_img=np.zeros([19,32])
+#seed denstity maps for each simulations
 for i_io in range(0,len(res)):
     print("i",i_io)
     for j_io in range(0,len(drt)):
@@ -194,171 +467,86 @@ for i_io in range(0,len(res)):
         for k_io in range(0, len(ang_thr)):
             for l_io in range(-1,0):#len(w)):
                 print(l_io)
+
                 base = "/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations_scale_50_res-"
                 npath = base + str(int(res[i_io] * 1000)) + "um_drt-" + str(int(drt[j_io] * 100)) + "_w-" + \
                         str(int(round(w[l_io], 2) * 100)) + "_angthr-" + str(int(ang_thr[k_io])) + "/"
 
                 nlines = lines(npath + 'native_streamlines.vtk')
                 ulines = lines(npath + 'from_unfold_streamlines.vtk')
+
                 simlines = linesFromSims(npath, nlines, ulines)
 
                 simlines.filter(simlines.nlines)
                 simlines.filter(simlines.ulines)
 
-                crs_over_proportion[i_io,j_io,k_io,0]=len(simlines.nlines.lines_crsovr)/len(simlines.nlines.seedlines)
-                crs_over_proportion[i_io,j_io,k_io,1]=len(simlines.ulines.lines_crsovr)/len(simlines.ulines.seedlines)
+                snap=simlines.lineCount(simlines.nlines.seedlines)
+                snap=snap.reshape(simlines.mask.shape)
+                nsnap= snap[:,:,0]
 
-                crs_over_fail_proportion[i_io,j_io,k_io,0]=len(simlines.nlines.lines_crsovr_fail)/len(
-                    simlines.nlines.seedlines)
-                crs_over_fail_proportion[i_io,j_io,k_io,1]=len(simlines.ulines.lines_crsovr_fail)/len(
-                    simlines.ulines.seedlines)
+                #temp=Image.fromarray(snap)
+                #n_master_img=n_master_img+np.asarray( temp.resize(n_master_img.shape[::-1]))
 
+                #plt.imshow(snap)
+                #plt.savefig(npath+'native_density_map.png')
+                #plt.close()
 
+                snap = simlines.lineCount(simlines.ulines.seedlines)
+                snap = snap.reshape(simlines.mask.shape)
+                usnap = snap[:, :, 0]
 
-#crossover plot
-p=1
-fig, ax = plt.subplots(8,5)
-fig.set_figheight(18)
-fig.set_figwidth(10)
-fig.subplots_adjust(wspace=1)
-fig.subplots_adjust(hspace=1)
+                residue=usnap-nsnap
+                tangmask=simlines.radtang==2
 
-for i in range(0,len(res)):
-    for j in range(0,len(drt)):
-        plotname=str((round(res[i],1))) + "mm drt" + str(round(drt[j] * 10,1))
-        ##plt.figure(p)
-        ax[i,j].set_title(plotname)
-        if( i==0 and j==0):
-            #ax[i,j].set_ylabel('Sensitivity')
-            #ax[i, j].set_ylabel('Specificity')
-            ax[i, j].set_xlabel('Angle Thres.')
+                plt.title('unfld-native')
+                plt.imshow(residue)
+                plt.colorbar()
+                plt.imshow(tangmask[:,:,0],alpha=0.5)
+                plt.savefig(npath + 'residue_map.png')
+                plt.close()
 
-        ax[i,j].set_xlim([20,95])
-        ax[i, j].set_ylim([-0.1, 1.1])
-        y=crs_over_proportion[i,j,:,0]
-        x=ang_thr
-        ax[i,j].plot(x,y,color='blue')
-        y=crs_over_proportion[i,j,:,1]
-        ax[i,j].plot(x,y,color='orange')
-
-#crossover fail
-p=1
-fig, ax = plt.subplots(8,5)
-fig.set_figheight(18)
-fig.set_figwidth(10)
-fig.subplots_adjust(wspace=1)
-fig.subplots_adjust(hspace=1)
-
-for i in range(0,len(res)):
-    for j in range(0,len(drt)):
-        plotname=str((round(res[i],1))) + "mm drt" + str(round(drt[j] * 10,1))
-        ##plt.figure(p)
-        ax[i,j].set_title(plotname)
-        if( i==0 and j==0):
-            #ax[i,j].set_ylabel('Sensitivity')
-            #ax[i, j].set_ylabel('Specificity')
-            ax[i, j].set_xlabel('Angle Thres.')
-
-        ax[i,j].set_xlim([20,95])
-        ax[i, j].set_ylim([-0.1, 1.1])
-        y=crs_over_fail_proportion[i,j,:,0]
-        x=ang_thr
-        ax[i,j].plot(x,y,color='blue')
-        y=crs_over_fail_proportion[i,j,:,1]
-        ax[i,j].plot(x,y,color='orange')
-
-#where are the failures?
-nfig, nax = plt.subplots()
-ufig, uax = plt.subplots()
-nax.axis('equal')
-uax.axis('equal')
-for i_io in range(0,len(res)):
-    print("i",i_io)
-    for j_io in range(0,len(drt)):
-        print("i j", i_io, j_io)
-        for k_io in range(0, len(ang_thr)):
-            for l_io in range(-1,0):#len(w)):
-                print(l_io)
-                base = "/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations_scale_50_res-"
-                npath = base + str(int(res[i_io] * 1000)) + "um_drt-" + str(int(drt[j_io] * 100)) + "_w-" + \
-                        str(int(round(w[l_io], 2) * 100)) + "_angthr-" + str(int(ang_thr[k_io])) + "/"
-
-                nlines = lines(npath + 'native_streamlines.vtk')
-                ulines = lines(npath + 'from_unfold_streamlines.vtk')
-                simlines = linesFromSims(npath, nlines, ulines)
-
-                simlines.filter(simlines.nlines)
-                simlines.filter(simlines.ulines)
-
-                for line in simlines.nlines.lines_crsovr_fail:
-                    nax.plot(line[:,0],line[:,1],alpha=0.075,color="blue")
-
-                for line in simlines.ulines.lines_crsovr_fail:
-                    uax.plot(line[:,0],line[:,1],alpha=0.075,color="orange")
-
-#where are the winner?
-nfigw, naxw = plt.subplots()
-ufigw, uaxw = plt.subplots()
-naxw.axis('equal')
-uaxw.axis('equal')
-for i_io in range(0,len(res)):
-    print("i",i_io)
-    for j_io in range(0,len(drt)):
-        print("i j", i_io, j_io)
-        for k_io in range(0, len(ang_thr)):
-            for l_io in range(-1,0):#len(w)):
-                print(l_io)
-                base = "/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations_scale_50_res-"
-                npath = base + str(int(res[i_io] * 1000)) + "um_drt-" + str(int(drt[j_io] * 100)) + "_w-" + \
-                        str(int(round(w[l_io], 2) * 100)) + "_angthr-" + str(int(ang_thr[k_io])) + "/"
-
-                nlines = lines(npath + 'native_streamlines.vtk')
-                ulines = lines(npath + 'from_unfold_streamlines.vtk')
-                simlines = linesFromSims(npath, nlines, ulines)
-
-                simlines.filter(simlines.nlines)
-                simlines.filter(simlines.ulines)
-
-                for line in simlines.nlines.lines_crsovr:
-                    naxw.plot(line[:,1],line[:,2],alpha=0.075,color="blue")
-
-                for line in simlines.ulines.lines_crsovr:
-                    uaxw.plot(line[:,1],line[:,2],alpha=0.075,color="orange")
-
-uu=0.3
-u=0
-vv=np.pi / 6
-v=-np.pi / 6
-
-constline=np.ones(10)
-
-uline=np.linspace(u,uu,10)
-vline=np.linspace(v,vv,10)
-u_const=constline*u
-uu_const=constline*uu
-v_const=constline*v
-vv_const=constline*vv
+                #plt.imshow(snap)
+                #plt.savefig(npath + 'unfold_density_map.png')
+                #plt.close()
+                #temp=Image.fromarray(snap)
+                #u_master_img=u_master_img+np.asarray( temp.resize(u_master_img.shape[::-1]))
 
 
-figo, axo = plt.subplots()
-axo.axis('equal')
-x,y,z=phiInv(uline,v_const,0,0.99,scale=scale)
-nax.plot(x,y,color='black')
-x,y,z=phiInv(uline,vv_const,0,0.99,scale=scale)
-nax.plot(x,y,color='black')
-x,y,z=phiInv(u_const,vline,0,0.99,scale=scale)
-nax.plot(x,y,color='black')
-x,y,z=phiInv(uu_const,vline,0,0.99,scale=scale)
-nax.plot(x,y,color='black')
-
-x,y,z=phiInv(uline,v_const,0,0.99,scale=scale)
-uax.plot(x,y,color='black')
-x,y,z=phiInv(uline,vv_const,0,0.99,scale=scale)
-uax.plot(x,y,color='black')
-x,y,z=phiInv(u_const,vline,0,0.99,scale=scale)
-uax.plot(x,y,color='black')
-x,y,z=phiInv(uu_const,vline,0,0.99,scale=scale)
-uax.plot(x,y,color='black')
+# #this is to make outline of rapunzel
+# uu=0.3
+# u=0
+# vv=np.pi / 6
+# v=-np.pi / 6
+#
+# constline=np.ones(10)
+#
+# uline=np.linspace(u,uu,10)
+# vline=np.linspace(v,vv,10)
+# u_const=constline*u
+# uu_const=constline*uu
+# v_const=constline*v
+# vv_const=constline*vv
+#
+#
+# figo, axo = plt.subplots()
+# axo.axis('equal')
+# x,y,z=phiInv(uline,v_const,0,0.99,scale=scale)
+# nax.plot(x,y,color='black')
+# x,y,z=phiInv(uline,vv_const,0,0.99,scale=scale)
+# nax.plot(x,y,color='black')
+# x,y,z=phiInv(u_const,vline,0,0.99,scale=scale)
+# nax.plot(x,y,color='black')
+# x,y,z=phiInv(uu_const,vline,0,0.99,scale=scale)
+# nax.plot(x,y,color='black')
+#
+# x,y,z=phiInv(uline,v_const,0,0.99,scale=scale)
+# uax.plot(x,y,color='black')
+# x,y,z=phiInv(uline,vv_const,0,0.99,scale=scale)
+# uax.plot(x,y,color='black')
+# x,y,z=phiInv(u_const,vline,0,0.99,scale=scale)
+# uax.plot(x,y,color='black')
+# x,y,z=phiInv(uu_const,vline,0,0.99,scale=scale)
+# uax.plot(x,y,color='black')
 
 
 
