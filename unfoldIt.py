@@ -5,52 +5,54 @@ import nibabel as nib
 import simulateDiffusion
 import diffusion
 import unfoldSubject
-from pyshtools.shtools import SHExpandLSQ
-from pyshtools.shtools import MakeGridPoint
-from pyshtools.shtools import MakeGridPointC
 import os
 import shutil
+import sys
 
 #ress=['close_high/', 'close_medium/', 'close_low/']
 #ress=['close_medium/']
 
 
+i=int(sys.argv[1])
+j=int(sys.argv[2])
+k=int(sys.argv[3])
 
+print(i,j,k)
 
-scale=0.05
+scale=100
 res=[1.75,1.5,1.25,1.00,0.75]
 res=np.asarray(res)
 res=scale*res/100
 drt=np.linspace(0.1,0.25,5)
 w=np.linspace(0.9,0.99,4)
-for i in range(2,3):#len(res)):
-    print(i)
-    for j in range(2,3):#len(drt)):
-        for k in range(3,4):#len(w)):
-            base = "/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations_res-"
-            path = base + str(int(res[i] * 10000)) + "mm_drt-" + str(int(drt[j] * 100)) + "+w-" + str(
-    int(w[k] * 100)) + "/"
+# for i in range(2,3):#len(res)):
+#     print(i)
+#     for j in range(2,3):#len(drt)):
+#         for k in range(3,4):#len(w)):
 
-            #path="/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations_nonConformal/"
-            sub=unfoldSubject.unfoldSubject()
-            #sub.loadCoordinates(path="K:\\Datasets\\diffusionSimulations\\",prefix="")
-            sub.loadCoordinates(path=path,prefix="")
-            sub.coords.computeGradDev()
-            sub.loadDiffusion(path)
-            sub.pushToUnfold(type='diffusion')
-            #sub.diffNoGradDev()
-            upath=path+"Unfolded/"
-            if not os.path.exists(upath):
-                os.mkdir(upath)
-            shutil.copyfile(path+"bvals",upath+"bvals")
-            shutil.copyfile(path + "bvecs", upath + "bvecs")
-            nib.save(sub.diffUnfold.vol,upath+'data.nii.gz')
-            nib.save(sub.coords.gradDevUVW_nii,upath+'grad_dev.nii.gz')
-            nib.save(sub.coords.gradDevXYZ_nii,upath+'grad_devXYZ.nii.gz')
-            temp_mask=sub.diffUnfold.mask.get_fdata()
-            temp_mask[:,:,-1]=np.NaN
-            temp_mask=nib.Nifti1Image(temp_mask,sub.diffUnfold.mask.affine)
-            nib.save(sub.diffUnfold.mask,upath+'nodif_brain_mask.nii.gz')
+base = "/home/u2hussai/Unfolding/data/diffusionSimulations_res-"
+path = base + str(int(res[i] * 10000)) + "mm_drt-" + str(int(drt[j] * 100)) + "+w-" + str(int(w[k] * 100)) + "/"
+
+#path="/home/uzair/PycharmProjects/Unfolding/data/diffusionSimulations_nonConformal/"
+sub=unfoldSubject.unfoldSubject()
+#sub.loadCoordinates(path="K:\\Datasets\\diffusionSimulations\\",prefix="")
+sub.loadCoordinates(path=path,prefix="")
+sub.coords.computeGradDev()
+sub.loadDiffusion(path)
+sub.pushToUnfold(type='diffusion')
+#sub.diffNoGradDev()
+upath=path+"Unfolded/"
+if not os.path.exists(upath):
+    os.mkdir(upath)
+shutil.copyfile(path+"bvals",upath+"bvals")
+shutil.copyfile(path + "bvecs", upath + "bvecs")
+nib.save(sub.diffUnfold.vol,upath+'data.nii.gz')
+nib.save(sub.coords.gradDevUVW_nii,upath+'grad_dev.nii.gz')
+nib.save(sub.coords.gradDevXYZ_nii,upath+'grad_devXYZ.nii.gz')
+temp_mask=sub.diffUnfold.mask.get_fdata()
+temp_mask[:,:,-1]=np.NaN
+temp_mask=nib.Nifti1Image(temp_mask,sub.diffUnfold.mask.affine)
+nib.save(sub.diffUnfold.mask,upath+'nodif_brain_mask.nii.gz')
                         # nib.save(temp_mask,upath+'nodif_brain_mask.nii.gz')
                         # nib.save(sub.coords.X_uvwa_nii,upath+'X.nii.gz')
                         # nib.save(sub.coords.Y_uvwa_nii,upath+'Y.nii.gz')

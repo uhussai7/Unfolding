@@ -2,9 +2,10 @@ from dipy.data import default_sphere
 from dipy.tracking.local_tracking import LocalTracking
 import numpy as np
 from scipy.interpolate import griddata
-from dipy.viz import window, actor, has_fury, colormap
 from dipy.tracking.streamline import Streamlines
 import copy
+from coordinates import toInds
+
 
 def pointsPerLine(streamlines):
     N_lines=len(streamlines)
@@ -26,6 +27,118 @@ def allLines2Lines(allLines,pointsPerLine):
             streamlines.append(templine)
         first=pointsPerLine[i]
     return streamlines
+ 
+def connectedInds(line,mask_nii):
+    cinds=[]
+    stop=mask_nii.get_fdata()
+    for p in range(0,len(line)):
+        worlds = np.asarray([line[p,0], line[p,1], line[p,2]])
+        inds = toInds(mask_nii, [worlds])
+        inds = np.asarray(inds[0])
+        inds = inds.round()
+        inds = inds.astype(int)
+        condition = inds[0] >= stop.shape[0] or inds[1] >= stop.shape[1] or inds[2] >= stop.shape[2]
+        if condition==False:
+            cinds.append(list(inds)) if list(inds) not in cinds else cinds
+    return cinds
+
+class trueTracts:
+    def __init__(self,mask_nii,U_nii,V_nii,W_nii,phi,phiInv):
+        self.mask_nii=mask_nii
+        self.U_nii=U_nii
+        self.V_nii=V_nii
+        self.W_nii=W_nii
+        self.phi=phi
+        self.phiInv=phiInv
+        self.affine=U_nii.affine
+
+        ua, va, wa = self.phi(0, 0, 0)
+        uh, vh, wh = self.phi(abs(self.affine[0][0]), self.affine[0][0], 0)
+
+        self.delU = abs(uh - ua) / 10
+        self.delV = abs(vh - va) / 10
+
+    def connectedInds(self,stop_mask_nii,stopval,seed,const_coord):
+        stop=stop_mask_nii.get_fdata()
+        U = self.U_nii.get_fdata()
+        V = self.V_nii.get_fdata()
+
+
+        #lines = [] #all the streamlines from seed
+        allinds=[]
+
+        #positive streamlines
+        line=[]
+        u1, v1, w1 = self.phi(seed[0], seed[1], seed[2])
+        l = 0
+        v1p = v1
+        u1p = u1
+        if const_coord == 'u':
+            v1n = v1p + self.delV
+            lmax = (np.nanmax(V) - v1n) / self.delV + 1
+        else:
+            u1n = u1p + self.delU
+            lmax = (np.nanmax(U) - u1n) / self.delU + 1
+        while l < lmax:
+            xp, yp, zp = self.phiInv(u1p, v1p, w1)
+            worlds = np.asarray([xp, yp, zp])
+            inds = toInds(self.mask_nii, [worlds])
+            inds = np.asarray(inds[0])
+            inds = inds.round()
+            inds = inds.astype(int)
+            condition=inds[0]>=stop.shape[0] or inds[1]>=stop.shape[1] or inds[2]>=stop.shape[2]
+            if condition == True:
+                break
+            #add line to keep inds within image size.
+            if (stop[inds[0], inds[1], inds[2]] != stopval):
+                #print(stop[inds[0], inds[1], inds[2]])
+                break
+            else:
+                line.append(worlds)
+                allinds.append(list(inds)) if list(inds) not in allinds else allinds
+                if const_coord == 'u':
+                    v1p = v1p + self.delV
+                else:
+                    u1p = u1p + self.delU
+                l = l + 1
+        #if (len(line) > 0):
+            #line.append(line)
+        line.reverse()
+        allinds.reverse()
+        nline = []
+        l = 0
+        v1n = v1
+        u1n = u1
+        if const_coord == 'u':
+            v1n = v1n - self.delV
+            lmax = (-np.nanmin(V) + v1n) / self.delV + 1
+        else:
+            u1n = u1n - self.delU
+            lmax = (-np.nanmin(U) + u1n) / self.delU + 1
+        while l < lmax:
+            xn, yn, zn = self.phiInv(u1n, v1n, w1)
+            worlds = np.asarray([xn, yn, zn])
+            inds = toInds(self.mask_nii, [worlds])
+            inds = np.asarray(inds[0])
+            inds = inds.round()
+            inds = inds.astype(int)
+            condition=inds[0]>=stop.shape[0] or inds[1]>=stop.shape[1] or inds[2]>=stop.shape[2]
+            if condition == True:
+                break
+            if (stop[inds[0], inds[1], inds[2]] != stopval):
+                # pass
+                break
+            else:
+                line.append(worlds)
+                allinds.append(list(inds)) if list(inds) not in allinds else allinds
+                if const_coord == 'u':
+                    v1n = v1n - self.delV
+                else:
+                    u1n = u1n - self.delU
+                l = l + 1
+        #if (len(nline) > 0):
+            #line.append(nline)
+        return allinds,line
 
 class tracking:
     def __init__(self,peaks,stopping_criterion,seeds,affine,
@@ -53,7 +166,7 @@ class tracking:
                                            self.stopping_criterion,
                                            self.seeds,
                                            self.affine,
-                                           step_size=self.affine[0,0]/4)
+                                           step_size=abs(self.affine[0,0]/4))
             self.streamlines=Streamlines(streamlines_generator)
 
 

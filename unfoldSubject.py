@@ -5,7 +5,7 @@ import nibabel as nib
 from scipy.interpolate import griddata, LinearNDInterpolator, Rbf
 import copy
 from scipy.spatial import KDTree
-from pyshtools.shtools import SHExpandLSQ, MakeGridPoint
+#from pyshtools.shtools import SHExpandLSQ, MakeGridPoint
 
 class unfoldSubject:
     def __init__(self):

@@ -4,6 +4,8 @@ from scipy.interpolate import griddata, LinearNDInterpolator, Rbf
 from scipy.spatial import KDTree
 import nibabel as nib
 import copy
+from scipy.linalg import polar
+
 
 class domainParams:
     def __init__(self,min_a,max_a,min_b,max_b,min_c,max_c,dims=[None],deltas=[None]):
@@ -176,7 +178,7 @@ class coordinates:
         self.FUa_xyz = []
         self.FVa_xyz = []
         self.FWa_xyz = []
-        #radial basis interpolants
+        #radial basis interpolants #these are very memory hungry, nor reliable
         self.rFX_uvwa = []
         self.rFY_uvwa = []
         self.rFZ_uvwa = []
@@ -388,15 +390,33 @@ class coordinates:
         Computes all the different graddevs
         :return: grad_dev_nii
         """
-        C = [self.U_xyz_nii.get_data(),self.V_xyz_nii.get_data(),self.W_xyz_nii.get_data()]
+        C = [self.Ua_xyz_nii.get_data(),self.Va_xyz_nii.get_data(),self.Wa_xyz_nii.get_data()]
 
         grads = np.zeros((C[0].shape)+(3,3))
 
         for i in range(0,3):
             grads[:,:,:,i,0], grads[:,:,:,i,1],grads[:,:,:,i,2]=self.gradientNaN(C[i])/self.Ua_xyz_nii.affine[0][0]
 
+        graddev=np.asarray(grads.reshape(-1,3,3),order='F')
+
+        temp_graddev=copy.deepcopy(graddev)
+        graddev[:]=np.NaN
+        for g in range(0,graddev.shape[0]):
+            m=temp_graddev[g,:,:]
+            if(np.isnan( sum(sum(m)))==0):
+                #print(sum(sum(m)))
+                rot, deform=polar(m)
+                graddev[g,:,:]=m
+
+
+        #grads = graddev - np.identity(3)
+
+
+        grads=graddev
+        grads=grads.reshape((C[0].shape)+(3,3))
         grads=grads-np.identity(3)
-        self.gradDevXYZ_nii=grads.reshape(grads.shape[0:3]+(9,),order='F') #not yet nifti
+
+        self.gradDevXYZ_nii=grads.reshape((C[0].shape)+(9,),order='F') #not yet nifti
         self.gradDevXYZ_nii=nib.Nifti1Image(self.gradDevXYZ_nii,self.Ua_xyz_nii.affine)
 
         #move this data to unfolded space
@@ -414,10 +434,11 @@ class coordinates:
         Yuvw[condition] = 0
         Zuvw[condition] = 0
 
-        function='linear' #for rbf
+        function='multiquadric' #for rbf
         for i in range(0,9):
+            print("vol: %d" % (i))
             points, S = getPointsData(self.gradDevXYZ_nii,i)
-            # interpolator=LinearNDInterpolator(points,S)
+            #interpolator=LinearNDInterpolator(points,S)
             interpolator=Rbf(points[:,0],points[:,1],points[:,2],S,function=function)
             #temp=griddata(points, S, (Xuvw, Yuvw, Zuvw), method=interp)
             temp=interpolator(Xuvw, Yuvw, Zuvw)
