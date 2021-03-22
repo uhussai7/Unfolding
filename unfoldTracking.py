@@ -2,11 +2,10 @@ from dipy.data import default_sphere
 from dipy.tracking.local_tracking import LocalTracking
 import numpy as np
 from scipy.interpolate import griddata
-from dipy.viz import window, actor, has_fury, colormap
 from dipy.tracking.streamline import Streamlines
 import copy
-from scipy.linalg import polar
 from coordinates import toInds
+
 
 def pointsPerLine(streamlines):
     N_lines=len(streamlines)
@@ -28,22 +27,20 @@ def allLines2Lines(allLines,pointsPerLine):
             streamlines.append(templine)
         first=pointsPerLine[i]
     return streamlines
-
+ 
 def connectedInds(line,mask_nii):
     cinds=[]
     stop=mask_nii.get_fdata()
-    line=np.asarray(line)
-    inds=toInds(mask_nii, line)
-    inds = inds.round()
-    inds = inds.astype(int)
-    for ind in inds:
-        condition = ind[0] >= stop.shape[0] or ind[1] >= stop.shape[1] or ind[2] >= stop.shape[2]
+    for p in range(0,len(line)):
+        worlds = np.asarray([line[p,0], line[p,1], line[p,2]])
+        inds = toInds(mask_nii, [worlds])
+        inds = np.asarray(inds[0])
+        inds = inds.round()
+        inds = inds.astype(int)
+        condition = inds[0] >= stop.shape[0] or inds[1] >= stop.shape[1] or inds[2] >= stop.shape[2]
         if condition==False:
-            cinds.append(list(ind)) if list(ind) not in cinds else cinds
+            cinds.append(list(inds)) if list(inds) not in cinds else cinds
     return cinds
-
-#def radtangfilter(radtang,affine,lines,rad_val,tang_val):
-
 
 class trueTracts:
     def __init__(self,mask_nii,U_nii,V_nii,W_nii,phi,phiInv):
@@ -56,7 +53,7 @@ class trueTracts:
         self.affine=U_nii.affine
 
         ua, va, wa = self.phi(0, 0, 0)
-        uh, vh, wh = self.phi(self.affine[0][0], self.affine[0][0], 0)
+        uh, vh, wh = self.phi(abs(self.affine[0][0]), self.affine[0][0], 0)
 
         self.delU = abs(uh - ua) / 10
         self.delV = abs(vh - va) / 10
@@ -76,20 +73,13 @@ class trueTracts:
         l = 0
         v1p = v1
         u1p = u1
-        xp, yp, zp = self.phiInv(u1p, v1p, w1)
-        worlds = np.asarray([xp, yp, zp])
-        inds = toInds(self.mask_nii, [worlds])
-        inds = np.asarray(inds[0])
-        inds = inds.round()
-        inds = inds.astype(int)
-        allinds.append(list(inds)) if list(inds) not in allinds else allinds
         if const_coord == 'u':
             v1n = v1p + self.delV
             lmax = (np.nanmax(V) - v1n) / self.delV + 1
         else:
             u1n = u1p + self.delU
             lmax = (np.nanmax(U) - u1n) / self.delU + 1
-        while l < lmax: #
+        while l < lmax:
             xp, yp, zp = self.phiInv(u1p, v1p, w1)
             worlds = np.asarray([xp, yp, zp])
             inds = toInds(self.mask_nii, [worlds])
@@ -98,12 +88,10 @@ class trueTracts:
             inds = inds.astype(int)
             condition=inds[0]>=stop.shape[0] or inds[1]>=stop.shape[1] or inds[2]>=stop.shape[2]
             if condition == True:
-                #pass
                 break
             #add line to keep inds within image size.
             if (stop[inds[0], inds[1], inds[2]] != stopval):
                 #print(stop[inds[0], inds[1], inds[2]])
-                #pass
                 break
             else:
                 line.append(worlds)
@@ -136,10 +124,9 @@ class trueTracts:
             inds = inds.astype(int)
             condition=inds[0]>=stop.shape[0] or inds[1]>=stop.shape[1] or inds[2]>=stop.shape[2]
             if condition == True:
-                #pass
                 break
             if (stop[inds[0], inds[1], inds[2]] != stopval):
-                #pass
+                # pass
                 break
             else:
                 line.append(worlds)
@@ -175,53 +162,29 @@ class tracking:
 
     def localTracking(self):
         if self.graddev is None:
-            print(self.affine[0,0]/4)
-            streamlines_generator=LocalTracking(self.peaks,
-                                           self.stopping_criterion,
-                                           self.seeds,
-                                           self.affine,
-                                           step_size=abs(self.affine[0,0]/4))
-            self.streamlines=Streamlines(streamlines_generator)
 
 
-        else:
-            shape=self.graddev.shape
-            self.graddev=self.graddev.reshape(shape[0:3]+ (3, 3), order='F')
+            #multiply by the jacobian (zero out z-direction)
+            graddev=np.zeros([3,3])
+            graddev[0, 0] = 1
+            graddev[1, 1] = 1
+            graddev[2, 2] = 1
 
-            # self.graddev=np.asarray(self.graddev.reshape(-1,3,3))
-            #
-            # temp_graddev=copy.deepcopy(self.graddev)
-            # for g in range(0,self.graddev.shape[0]):
-            #     m=temp_graddev[g,:,:]
-            #     rot, deform=polar(m+np.eye(3))
-            #     self.graddev[g,:,:]=deform
-
-            # self.graddev=self.graddev.reshape(shape[0:3]+ (3, 3))
-
-            # self.graddev[:, :, :, :, 2] = 0
-            # self.graddev[:, :, :, 2, :] = 0
-            # self.graddev[:, :, :, 2, 2] = -1
-
-            self.graddev=(1*self.graddev.reshape([-1,3,3])+np.eye(3))
-            self.graddev=self.graddev.reshape(shape[0:3]+(3,3))
-
-
-            #multiply by the jacobian
-            new_peak_dirsp = np.einsum('ijkab,ijkvb->aijkv',
-                                      self.graddev, self.peaks.peak_dirs)
-            shape = new_peak_dirsp.shape
-            new_peak_dirsp = new_peak_dirsp.reshape(3, -1)
-            new_peak_dirs = copy.deepcopy(new_peak_dirsp)
-            for i in range(0, new_peak_dirs.shape[-1]):
-                norm = np.linalg.norm(new_peak_dirsp[:, i])
-                if norm != 0:
-                    new_peak_dirs[:, i] = new_peak_dirsp[:, i] / norm
+            new_peak_dirsp = np.einsum('ab,ijkvb->aijkv',
+                                      graddev, self.peaks.peak_dirs)
+            shape=new_peak_dirsp.shape
+            new_peak_dirsp=new_peak_dirsp.reshape(3,-1)
+            new_peak_dirs=copy.deepcopy(new_peak_dirsp)
+            for i in range(0,new_peak_dirs.shape[-1]):
+                norm=np.linalg.norm(new_peak_dirsp[:, i])
+                if norm!=0:
+                    new_peak_dirs[:,i]=new_peak_dirsp[:,i]/norm
             new_peak_dirs = new_peak_dirs.reshape(shape)
-            new_peak_dirs = np.moveaxis(new_peak_dirs, 0, -1)
+            new_peak_dirs = np.moveaxis(new_peak_dirs,0,-1)
             new_peak_dirs = new_peak_dirs.reshape([-1, self.peaks.peak_indices.shape[-1], 3])
-            # update self.peaks.peak_indices
-            peak_indices = np.zeros(self.peaks.peak_indices.shape)
-            peak_indices = peak_indices.reshape([-1, self.peaks.peak_indices.shape[-1]])
+            #update self.peaks.peak_indices
+            peak_indices=np.zeros(self.peaks.peak_indices.shape)
+            peak_indices=peak_indices.reshape([-1,self.peaks.peak_indices.shape[-1]])
 
             for i in range(0, peak_indices.shape[0]):
                 for k in range(0, self.peaks.peak_indices.shape[-1]):
@@ -229,14 +192,57 @@ class tracking:
 
             self.peaks.peak_indices = peak_indices.reshape(self.peaks.peak_indices.shape)
 
-            streamlines_generator = LocalTracking(self.peaks,
-                                                  self.stopping_criterion,
-                                                  self.seeds,
-                                                  self.affine,
-                                                  step_size=abs(self.affine[0,0]/4))
 
-            self.streamlines = Streamlines(streamlines_generator)
-            self.NpointsPerLine = pointsPerLine(self.streamlines)
+
+            streamlines_generator=LocalTracking(self.peaks,
+                                           self.stopping_criterion,
+                                           self.seeds,
+                                           self.affine,
+                                           step_size=abs(self.affine[0,0]/6))
+            self.streamlines=Streamlines(streamlines_generator)
+
+
+        else:
+            shape=self.graddev.shape
+            self.graddev=self.graddev.reshape(shape[0:3]+ (3, 3), order='F')
+            #self.graddev[:, :, :, :, 2] = 0
+            #self.graddev[:, :, :, 2, :] = 0
+            #self.graddev[:, :, :, 2, 2] = -1
+
+            self.graddev=(self.graddev.reshape([-1,3,3])+np.eye(3))
+            self.graddev=self.graddev.reshape(shape[0:3]+(3,3))
+
+            #multiply by the jacobian
+            new_peak_dirsp = np.einsum('ijkab,ijkvb->aijkv',
+                                      self.graddev, self.peaks.peak_dirs)
+            shape=new_peak_dirsp.shape
+            new_peak_dirsp=new_peak_dirsp.reshape(3,-1)
+            new_peak_dirs=copy.deepcopy(new_peak_dirsp)
+            for i in range(0,new_peak_dirs.shape[-1]):
+                norm=np.linalg.norm(new_peak_dirsp[:, i])
+                if norm!=0:
+                    new_peak_dirs[:,i]=new_peak_dirsp[:,i]/norm
+            new_peak_dirs = new_peak_dirs.reshape(shape)
+            new_peak_dirs = np.moveaxis(new_peak_dirs,0,-1)
+            new_peak_dirs = new_peak_dirs.reshape([-1, self.peaks.peak_indices.shape[-1], 3])
+            #update self.peaks.peak_indices
+            peak_indices=np.zeros(self.peaks.peak_indices.shape)
+            peak_indices=peak_indices.reshape([-1,self.peaks.peak_indices.shape[-1]])
+
+            for i in range(0, peak_indices.shape[0]):
+                for k in range(0, self.peaks.peak_indices.shape[-1]):
+                    peak_indices[i, k] = self.sphere.find_closest(new_peak_dirs[i, k, :])
+
+            self.peaks.peak_indices = peak_indices.reshape(self.peaks.peak_indices.shape)
+
+            streamlines_generator= LocalTracking(self.peaks,
+                                             self.stopping_criterion,
+                                             self.seeds,
+                                             self.affine,
+                                             step_size=self.affine[0, 0]/6)
+
+            self.streamlines=Streamlines(streamlines_generator)
+            self.NpointsPerLine=pointsPerLine(self.streamlines)
 
 
     def plot(self):

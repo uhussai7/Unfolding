@@ -21,11 +21,12 @@ def diffusionTensor(L1,L2,L3,v1,v2,v3):
     return np.moveaxis(diffD, -1, 0)
 
 class simulateDiffusion:
-    def __init__(self, phi,dphi,phiInv, Uparams, L1L2L3,bvals, bvecs,N0=20):
+    def __init__(self, phi,dphi,phiInv, Uparams, L1L2L3, windowFunction ,bvals, bvecs,Nx,Ny):
         self.L1= []
         self.L2 = []
         self.L3 = []
         self.L1L2L3=L1L2L3
+        self.windowFunction=windowFunction
         self.gtab = gradient_table(bvals,bvecs)
         self.bvals = []
         self.bvecs = [] #this can be taken from hcp file and then use diffusion class to split shells
@@ -46,7 +47,8 @@ class simulateDiffusion:
         self.phi=phi
         self.dphi=dphi
         self.phiInv=phiInv
-        self.N0=N0
+        self.Nx=Nx
+        self.Ny=Ny
 
     def simulate(self,path=None):
 
@@ -55,8 +57,13 @@ class simulateDiffusion:
 
 
         #these are native space parameters
-        Nx = self.N0
+        Nx = self.Nx
+        Ny = self.Ny
+
         dx = (np.nanmax(X) - np.nanmin(X)) / (Nx - 1)
+        dy = (np.nanmax(Y) - np.nanmin(Y)) / (Ny - 1)
+
+        davg=min(dx,dy)
 
         # self.Nparams = domainParams(np.nanmin(X), np.nanmax(X),
         #                             np.nanmin(Y), np.nanmax(Y),
@@ -65,7 +72,7 @@ class simulateDiffusion:
         self.Nparams = domainParams(np.nanmin(X), np.nanmax(X),
                                     np.nanmin(Y), np.nanmax(Y),
                                     np.nanmin(Z), np.nanmax(Z),
-                                    deltas=[dx, dx, dx])
+                                    deltas=[davg, davg, davg])
 
         #make the native space coordinates
         print('Making native space coordinates...')
@@ -73,21 +80,43 @@ class simulateDiffusion:
         self.U_nii, self.V_nii, self.W_nii = applyMask(self.U_nii, self.V_nii, self.W_nii,self.Uparams)
         self.v1, self.v2, self.v3 = self.dphi(self.Nparams.A,self.Nparams.B,self.Nparams.C)
 
-        # make the diffusion tensor
-        print('Calculating diffusion tensor...')
+        #get weights
+        w_rad=self.windowFunction(self.Nparams.A,self.Nparams.B,self.Nparams.C)
+        w_tang=1-w_rad
+
+        # make the diffusion tensor for tangential compartment
+        print('Calculating diffusion tensor for tangnetial compartment')
         self.L1,self.L2,self.L3=self.L1L2L3(self.Nparams.A,self.Nparams.B,self.Nparams.C)
         self.dTensor = diffusionTensor(self.L1,self.L2,self.L3,self.v1,self.v2,self.v3)
 
         #generate the signal
-        print('Generating diffusion signal')
-        self.diff_nii = self.diffusionSignal()
-        self.diff_nii[np.isnan( self.U_nii)==1,:]=np.NaN
+        print('Generating diffusion signal for tangential compartment')
+        #self.diff_nii = self.diffusionSignal()
+        S_tang=self.diffusionSignal()
+        #multiply by weight
+        for vol in range(0,S_tang.shape[-1]):
+            S_tang[:,:,:,vol]=w_tang*S_tang[:,:,:,vol]
 
+
+        # make the diffusion tensor for radial compartment
+        print('Calculating diffusion tensor for radial compartment')
+        self.L1,self.L2,self.L3=self.L1L2L3(self.Nparams.A,self.Nparams.B,self.Nparams.C)
+        self.dTensor = diffusionTensor(self.L2,self.L1,self.L3,self.v1,self.v2,self.v3) #note the flipped vectors
+
+        #generate the signal
+        print('Generating diffusion signal for radial compartment')
+        #self.diff_nii = self.diffusionSignal()
+        S_rad=self.diffusionSignal()
+        for vol in range(0,S_rad.shape[-1]):
+            S_rad[:,:,:,vol]=w_rad*S_rad[:,:,:,vol]
+        #turn of signal outside window
+        
+        self.diff_nii = S_tang+ S_rad
+        self.diff_nii[np.isnan( self.U_nii)==1,:]=np.NaN
 
         #make a mask
         self.mask_nii = np.copy(self.U_nii)
         self.mask_nii[np.isnan(self.mask_nii)==0]=1
-
 
         print('Coverting to nifti...')
         #make save the nifti coordinate files

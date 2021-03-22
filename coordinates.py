@@ -6,6 +6,7 @@ import nibabel as nib
 import copy
 from scipy.linalg import polar
 
+
 class domainParams:
     def __init__(self,min_a,max_a,min_b,max_b,min_c,max_c,dims=[None],deltas=[None]):
         self.min_a = min_a
@@ -177,7 +178,7 @@ class coordinates:
         self.FUa_xyz = []
         self.FVa_xyz = []
         self.FWa_xyz = []
-        #radial basis interpolants
+        #radial basis interpolants #these are very memory hungry, nor reliable
         self.rFX_uvwa = []
         self.rFY_uvwa = []
         self.rFZ_uvwa = []
@@ -305,18 +306,17 @@ class coordinates:
                           np.nanmax(self.Ua_xyz_nii - 1*np.nanmin(self.Ua_xyz_nii))
         self.Va_xyz_nii = self.mean_v * (self.Va_xyz_nii - np.nanmin(self.Va_xyz_nii)) / \
                           np.nanmax(self.Va_xyz_nii - 1*np.nanmin(self.Va_xyz_nii))
-        self.Wa_xyz_nii = 6 * (self.Wa_xyz_nii - np.nanmin(self.Wa_xyz_nii)) / \
-                          np.nanmax(self.Wa_xyz_nii - 1*np.nanmin(self.Wa_xyz_nii))
+        #self.Wa_xyz_nii = self.mean_w * (self.Wa_xyz_nii - np.nanmin(self.Wa_xyz_nii)) / \
+        #                  np.nanmax(self.Wa_xyz_nii - 1*np.nanmin(self.Wa_xyz_nii))
 
-        # self.Ua_xyz_nii[self.Ua_xyz_nii==0]=np.NaN
-        # self.Va_xyz_nii[self.Ua_xyz_nii == 0] = np.NaN
-        # self.Wa_xyz_nii[self.Ua_xyz_nii == 0] = np.NaN
 
-        self.grads = None
-        self.cumsum=None
-        self.X_uvw_low = None
-        self.Y_uvw_low = None
-        self.Z_uvw_low = None
+
+
+        self.grads = []
+        self.cumsum=[]
+        self.X_uvw_low = []
+        self.Y_uvw_low = []
+        self.Z_uvw_low = []
 
         #extraction as lists
         self.Ua = self.Ua_xyz_nii[inds[:,0],inds[:,1],inds[:,2]]
@@ -325,10 +325,9 @@ class coordinates:
 
         #making the interpolator
         #function='multiquadric' #this is for rbf
-        function='linear'
-        eps=None
-        # print('Making uvwa in terms of xyz linear interpolator')
-        # points = np.asarray([self.X, self.Y, self.Z]).transpose()
+        function='linear' #this is for rbf
+        print('Making uvwa in terms of xyz linear interpolator')
+        points = np.asarray([self.X, self.Y, self.Z]).transpose()
         self.FUa_xyz = LinearNDInterpolator(points, self.Ua)
         self.FVa_xyz = LinearNDInterpolator(points, self.Va)
         self.FWa_xyz = LinearNDInterpolator(points, self.Wa)
@@ -337,16 +336,16 @@ class coordinates:
         self.FX_uvwa=  LinearNDInterpolator(points, self.X)
         self.FY_uvwa = LinearNDInterpolator(points, self.Y)
         self.FZ_uvwa = LinearNDInterpolator(points, self.Z)
-        # print('Making uvwa in terms of xyz Rbf interpolator')
-        # points = np.asarray([self.X, self.Y, self.Z]).transpose()
-        # self.rFUa_xyz = Rbf(self.X, self.Y, self.Z, self.Ua,function=function)
-        # self.rFVa_xyz = Rbf(self.X, self.Y, self.Z, self.Va,function=function)
-        # self.rFWa_xyz = Rbf(self.X, self.Y, self.Z, self.Wa,function=function)
-        # print('Making xyz in terms of uvw Rbf interpolator')
-        # points = np.asarray([self.Ua, self.Va, self.Wa]).transpose()
-        # self.rFX_uvwa=  Rbf(self.Ua, self.Va, self.Wa, self.X,function=function)
-        # self.rFY_uvwa = Rbf(self.Ua, self.Va, self.Wa, self.Y,function=function)
-        # self.rFZ_uvwa = Rbf(self.Ua, self.Va, self.Wa, self.Z,function=function)
+        print('Making uvwa in terms of xyz Rbf interpolator')
+        points = np.asarray([self.X, self.Y, self.Z]).transpose()
+        self.rFUa_xyz = Rbf(self.X, self.Y, self.Z, self.Ua,function=function)
+        self.rFVa_xyz = Rbf(self.X, self.Y, self.Z, self.Va,function=function)
+        self.rFWa_xyz = Rbf(self.X, self.Y, self.Z, self.Wa,function=function)
+        print('Making xyz in terms of uvw Rbf interpolator')
+        points = np.asarray([self.Ua, self.Va, self.Wa]).transpose()
+        self.rFX_uvwa=  Rbf(self.Ua, self.Va, self.Wa, self.X,function=function)
+        self.rFY_uvwa = Rbf(self.Ua, self.Va, self.Wa, self.Y,function=function)
+        self.rFZ_uvwa = Rbf(self.Ua, self.Va, self.Wa, self.Z,function=function)
 
 
 
@@ -361,7 +360,7 @@ class coordinates:
         :return:
         """
         print("Creating cartesian coordinates in terms of mean arc length unfolded space...")
-        res =self.U_xyz_nii.header['pixdim'][1]
+        res = self.U_xyz_nii.header['pixdim'][1]
         #
         #create the unfolded space (arclength corrected) domain parameter class instance
         self.Uparams = domainParams(np.nanmin(self.Ua), np.nanmax(self.Ua),  # these are arclength corrected
@@ -369,13 +368,13 @@ class coordinates:
                                np.nanmin(self.Wa), np.nanmax(self.Wa),
                                deltas=[res, res, res])
 
-        points = np.asarray([self.Ua, self.Va, self.Wa]).transpose()
-        self.FX_uvwa=  LinearNDInterpolator(points, self.X) #these can be made in meanArcLength() also
-        self.FY_uvwa = LinearNDInterpolator(points, self.Y)
-        self.FZ_uvwa = LinearNDInterpolator(points, self.Z)
+        # points = np.asarray([self.Ua, self.Va, self.Wa]).transpose()
+        # self.FX_uvwa=  LinearNDInterpolator(points, self.X) #these can be made in meanArcLength() also
+        # self.FY_uvwa = LinearNDInterpolator(points, self.Y)
+        # self.FZ_uvwa = LinearNDInterpolator(points, self.Z)
 
-        #interps=[self.rFX_uvwa,self.rFY_uvwa,self.rFZ_uvwa] #putting interpolants in list to pass to interpolator3
-        interps = [self.FX_uvwa, self.FY_uvwa, self.FZ_uvwa]
+        interps=[self.rFX_uvwa,self.rFY_uvwa,self.rFZ_uvwa] #putting interpolants in list to pass to interpolator3
+        #interps = [self.FX_uvwa, self.FY_uvwa, self.FZ_uvwa]
         #computing xyz in terms of arclength corrected uvwa
         [self.X_uvwa_nii, self.Y_uvwa_nii, self.Z_uvwa_nii] = self.Uparams.interpolator3(interps)
         #self.X_uvwa_nii, self.Y_uvwa_nii, self.Z_uvwa_nii = self.Uparams.griddata3(points,[self.X,self.Y,self.Z])
@@ -440,8 +439,8 @@ class coordinates:
         for i in range(0,9):
             print("vol: %d" % (i))
             points, S = getPointsData(self.gradDevXYZ_nii,i)
-            interpolator=LinearNDInterpolator(points,S)
-            #interpolator=Rbf(points[:,0],points[:,1],points[:,2],S,function=function)
+            #interpolator=LinearNDInterpolator(points,S)
+            interpolator=Rbf(points[:,0],points[:,1],points[:,2],S,function=function)
             #temp=griddata(points, S, (Xuvw, Yuvw, Zuvw), method=interp)
             temp=interpolator(Xuvw, Yuvw, Zuvw)
             temp[condition]=np.NaN

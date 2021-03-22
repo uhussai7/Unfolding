@@ -5,7 +5,7 @@ import nibabel as nib
 from scipy.interpolate import griddata, LinearNDInterpolator, Rbf
 import copy
 from scipy.spatial import KDTree
-from pyshtools.shtools import SHExpandLSQ, MakeGridPoint
+#from pyshtools.shtools import SHExpandLSQ, MakeGridPoint
 
 class unfoldSubject:
     def __init__(self):
@@ -34,7 +34,7 @@ class unfoldSubject:
         if type=='diffusion':
             volume_nii=copy.deepcopy(self.diff.vol)
         interp='nearest'
-        function='multiquadric'
+        function='linear'
         Xuvw = self.coords.X_uvwa_nii.get_data()
         Yuvw = self.coords.Y_uvwa_nii.get_data()
         Zuvw = self.coords.Z_uvwa_nii.get_data()
@@ -54,8 +54,8 @@ class unfoldSubject:
             for i in range(0,Ndims[4]):
                 print("vol: %d" % (i))
                 points,S = coordinates.getPointsData(volume_nii,i)
-                interpolator = LinearNDInterpolator(points, S)
-                #interpolator = Rbf(points[:,0],points[:,1],points[:,2],S, function=function)
+                #interpolator = LinearNDInterpolator(points, S)
+                interpolator = Rbf(points[:,0],points[:,1],points[:,2],S, function=function)
                 #temp=griddata(points,S,(Xuvw,Yuvw,Zuvw),method=interp)
                 temp = interpolator(Xuvw, Yuvw, Zuvw)
                 temp[condition]=np.NaN
@@ -65,8 +65,8 @@ class unfoldSubject:
             volume_out_nii = np.zeros(size)  # not yet nifti
             volume_out_nii[volume_out_nii==0]=np.NaN
             points, S = coordinates.getPointsData(volume_nii)
-            interpolator = LinearNDInterpolator(points, S)
-            #interpolator = Rbf(points[:,0],points[:,1],points[:,2], S,function=function)
+            #interpolator = LinearNDInterpolator(points, S)
+            interpolator = Rbf(points[:,0],points[:,1],points[:,2], S,function=function)
             #volume_out_nii= griddata(points, S,(Xuvw,Yuvw,Zuvw),method=interp)
             volume_out_nii=interpolator((Xuvw, Yuvw, Zuvw))
             volume_out_nii[condition] = np.NaN
